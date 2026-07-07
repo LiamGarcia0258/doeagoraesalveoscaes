@@ -1,0 +1,520 @@
+/* ============================================================
+   Abrigo São Francisco — Design tokens
+   Paleta: verde-mata profundo + osso quente + laranja-resgate
+   Tipografia: Fraunces (display, calorosa) + Inter (corpo/UI)
+   ============================================================ */
+:root {
+  --pine-900: #1f2b22;
+  --pine-800: #2b3a2f;
+  --pine-700: #3d4f40;
+  --bone-100: #f6efe0;
+  --bone-50: #fbf7ee;
+  --clay-600: #c65d3b;
+  --rescue-500: #e2822f;
+  --rescue-600: #cf6d1e;
+  --ink-900: #211d16;
+  --ink-600: #57503f;
+  --line: rgba(33, 29, 22, 0.12);
+  --shadow-soft: 0 20px 40px -20px rgba(31, 43, 34, 0.35);
+
+  --font-display: "Fraunces", "Iowan Old Style", serif;
+  --font-body: "Inter", -apple-system, BlinkMacSystemFont, sans-serif;
+}
+
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+
+body {
+  margin: 0;
+  font-family: var(--font-body);
+  color: var(--ink-900);
+  background: var(--bone-50);
+  -webkit-font-smoothing: antialiased;
+}
+
+img { max-width: 100%; display: block; }
+
+a { color: inherit; }
+
+.container {
+  width: 100%;
+  max-width: 1120px;
+  margin: 0 auto;
+  padding: 0 24px;
+}
+
+/* ---------- focus visibility ---------- */
+button:focus-visible,
+a:focus-visible {
+  outline: 3px solid var(--rescue-500);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * { animation-duration: 0.001ms !important; transition-duration: 0.001ms !important; scroll-behavior: auto !important; }
+}
+
+/* ============================================================
+   Header
+   ============================================================ */
+.site-header {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  background: var(--bone-50);
+  border-bottom: 1px solid var(--line);
+}
+.site-header__inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 24px;
+}
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.brand img {
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  border: 2px solid var(--rescue-500);
+  object-fit: cover;
+}
+.brand span {
+  font-weight: 700;
+  font-size: 0.95rem;
+  line-height: 1.15;
+  color: var(--pine-900);
+}
+.btn-header-donate {
+  background: var(--pine-800);
+  color: var(--bone-100);
+  border: none;
+  padding: 10px 20px;
+  border-radius: 999px;
+  font-weight: 700;
+  font-size: 0.85rem;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  transition: transform 0.15s ease, background 0.15s ease;
+}
+.btn-header-donate:hover { background: var(--rescue-600); transform: translateY(-1px); }
+
+/* ============================================================
+   Hero
+   ============================================================ */
+.hero {
+  position: relative;
+  min-height: 78vh;
+  display: flex;
+  align-items: center;
+  color: var(--bone-50);
+  overflow: hidden;
+}
+.hero__bg {
+  position: absolute;
+  inset: 0;
+  background-size: cover;
+  background-position: center 30%;
+}
+.hero__scrim {
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(180deg, rgba(31,43,34,0.55) 0%, rgba(31,43,34,0.72) 55%, rgba(20,26,20,0.92) 100%);
+}
+.hero__content {
+  position: relative;
+  z-index: 2;
+  max-width: 640px;
+  padding: 120px 0 80px;
+}
+.eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--clay-600);
+  color: var(--bone-50);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  padding: 7px 14px;
+  border-radius: 999px;
+  margin-bottom: 22px;
+}
+.eyebrow::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--bone-50);
+  animation: pulse 1.8s ease-in-out infinite;
+}
+@keyframes pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.4; transform: scale(0.7); }
+}
+.hero h1 {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: clamp(2.6rem, 6vw, 4.2rem);
+  line-height: 1.04;
+  margin: 0 0 20px;
+}
+.hero p {
+  font-size: clamp(1.05rem, 2vw, 1.25rem);
+  line-height: 1.5;
+  color: rgba(251, 247, 238, 0.88);
+  max-width: 480px;
+  margin: 0 0 34px;
+  font-weight: 400;
+}
+.btn-primary {
+  background: var(--rescue-500);
+  color: var(--pine-900);
+  border: none;
+  font-family: var(--font-body);
+  font-weight: 800;
+  font-size: 1.02rem;
+  padding: 17px 34px;
+  border-radius: 12px;
+  cursor: pointer;
+  box-shadow: 0 14px 30px -10px rgba(226, 130, 47, 0.55);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+.btn-primary:hover { transform: translateY(-2px); box-shadow: 0 18px 34px -8px rgba(226, 130, 47, 0.65); }
+
+/* ============================================================
+   Donation card
+   ============================================================ */
+.donate-wrap {
+  position: relative;
+  z-index: 5;
+  margin-top: -64px;
+}
+.donate-card {
+  max-width: 900px;
+  margin: 0 auto;
+  background: var(--bone-100);
+  border-radius: 26px;
+  box-shadow: var(--shadow-soft);
+  border: 1px solid rgba(31, 43, 34, 0.06);
+  padding: 44px clamp(20px, 5vw, 56px) 40px;
+}
+.donate-card__head {
+  text-align: center;
+  margin-bottom: 30px;
+}
+.donate-card__head h2 {
+  font-family: var(--font-display);
+  font-size: 1.7rem;
+  font-weight: 600;
+  color: var(--pine-900);
+  margin: 0 0 6px;
+}
+.donate-card__head p {
+  color: var(--ink-600);
+  font-size: 0.95rem;
+  margin: 0;
+}
+
+.value-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+  gap: 12px;
+  margin-bottom: 8px;
+}
+.value-btn {
+  position: relative;
+  border: 2px solid var(--line);
+  background: var(--bone-50);
+  color: var(--ink-900);
+  border-radius: 14px;
+  padding: 14px 8px 12px;
+  font-family: var(--font-body);
+  font-weight: 800;
+  font-size: 1.05rem;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease, transform 0.15s ease;
+  text-align: center;
+}
+.value-btn small {
+  display: block;
+  font-weight: 500;
+  font-size: 0.62rem;
+  color: var(--ink-600);
+  margin-top: 4px;
+  line-height: 1.2;
+}
+.value-btn:hover {
+  border-color: var(--rescue-500);
+  background: #fff7ec;
+  transform: translateY(-2px);
+}
+.value-btn.is-featured {
+  border-color: var(--rescue-500);
+  background: #fff3e4;
+}
+.value-btn.is-featured::after {
+  content: "MAIS ESCOLHIDO";
+  position: absolute;
+  top: -10px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--rescue-500);
+  color: var(--pine-900);
+  font-size: 0.52rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  padding: 3px 8px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+
+.custom-donate {
+  margin-top: 26px;
+  text-align: center;
+  padding-top: 26px;
+  border-top: 1px dashed var(--line);
+}
+.custom-donate p {
+  color: var(--ink-600);
+  font-size: 0.9rem;
+  margin: 0 0 14px;
+}
+.btn-secondary {
+  background: var(--pine-800);
+  color: var(--bone-100);
+  border: none;
+  font-weight: 700;
+  font-size: 0.95rem;
+  padding: 13px 28px;
+  border-radius: 12px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  transition: background 0.15s ease, transform 0.15s ease;
+}
+.btn-secondary:hover { background: var(--rescue-600); transform: translateY(-2px); }
+
+.secure-note {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: var(--ink-600);
+  font-size: 0.78rem;
+  margin-top: 22px;
+}
+
+/* ============================================================
+   Transparency section
+   ============================================================ */
+.transparency {
+  padding: 96px 0 80px;
+  background: var(--bone-50);
+}
+.transparency__grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 56px;
+  align-items: center;
+}
+@media (max-width: 860px) {
+  .transparency__grid { grid-template-columns: 1fr; }
+}
+.photo-stack {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+.photo-stack img {
+  border-radius: 18px;
+  object-fit: cover;
+  width: 100%;
+  height: 190px;
+  box-shadow: 0 18px 30px -18px rgba(31,43,34,0.4);
+}
+.photo-stack img:first-child { transform: rotate(-2deg); }
+.photo-stack img:nth-child(2) { transform: rotate(2deg); }
+.photo-stack .photo-wide {
+  grid-column: span 2;
+  height: 230px;
+  transform: rotate(-1deg);
+}
+.transparency h2 {
+  font-family: var(--font-display);
+  font-size: 2.1rem;
+  font-weight: 600;
+  color: var(--pine-900);
+  margin: 0 0 18px;
+}
+.transparency > .container > .transparency__grid > div:last-child > p {
+  color: var(--ink-600);
+  font-size: 1.05rem;
+  line-height: 1.6;
+  margin: 0 0 28px;
+}
+.trust-list { list-style: none; margin: 0 0 8px; padding: 0; display: grid; gap: 16px; }
+.trust-list li {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  color: var(--ink-900);
+  font-size: 0.98rem;
+}
+.trust-list .tick {
+  flex-shrink: 0;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: var(--pine-800);
+  color: var(--bone-100);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.8rem;
+}
+
+/* ============================================================
+   FAQ
+   ============================================================ */
+.faq {
+  padding: 0 0 100px;
+  background: var(--bone-50);
+}
+.faq__head {
+  text-align: center;
+  margin-bottom: 34px;
+}
+.faq__head h2 {
+  font-family: var(--font-display);
+  font-size: 2rem;
+  font-weight: 600;
+  color: var(--pine-900);
+  margin: 0 0 8px;
+}
+.faq__head p { color: var(--ink-600); margin: 0; }
+.faq-list {
+  max-width: 760px;
+  margin: 0 auto;
+  display: grid;
+  gap: 12px;
+}
+.faq-item {
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--bone-100);
+  overflow: hidden;
+}
+.faq-item__q {
+  width: 100%;
+  background: none;
+  border: none;
+  text-align: left;
+  padding: 18px 20px;
+  font-family: var(--font-body);
+  font-weight: 700;
+  font-size: 0.98rem;
+  color: var(--ink-900);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  cursor: pointer;
+  gap: 14px;
+}
+.faq-item__q .chev { transition: transform 0.2s ease; flex-shrink: 0; color: var(--rescue-600); }
+.faq-item.is-open .faq-item__q .chev { transform: rotate(180deg); }
+.faq-item__a {
+  max-height: 0;
+  overflow: hidden;
+  transition: max-height 0.25s ease;
+}
+.faq-item__a-inner {
+  padding: 0 20px 20px;
+  color: var(--ink-600);
+  font-size: 0.92rem;
+  line-height: 1.6;
+}
+
+/* ============================================================
+   Footer
+   ============================================================ */
+.site-footer {
+  background: var(--pine-900);
+  color: rgba(251, 247, 238, 0.75);
+  padding: 56px 0 40px;
+  text-align: center;
+}
+.site-footer .brand {
+  justify-content: center;
+  margin-bottom: 22px;
+}
+.site-footer .brand span { color: var(--bone-50); font-size: 1.05rem; }
+.footer-address {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(255,255,255,0.06);
+  padding: 10px 20px;
+  border-radius: 999px;
+  font-size: 0.85rem;
+  margin-bottom: 26px;
+}
+.footer-rule {
+  width: 100%;
+  max-width: 360px;
+  height: 1px;
+  background: rgba(255,255,255,0.12);
+  margin: 0 auto 22px;
+}
+.site-footer small { font-size: 0.8rem; opacity: 0.7; }
+
+/* ============================================================
+   Toast (feedback ao redirecionar)
+   ============================================================ */
+.toast {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%) translateY(20px);
+  background: var(--pine-900);
+  color: var(--bone-50);
+  padding: 14px 22px;
+  border-radius: 12px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  box-shadow: 0 20px 40px -12px rgba(0,0,0,0.4);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s ease, transform 0.2s ease;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.toast.is-visible {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+.toast .spinner {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 2px solid rgba(251,247,238,0.35);
+  border-top-color: var(--bone-50);
+  animation: spin 0.7s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+@media (max-width: 600px) {
+  .donate-card { padding: 32px 18px 30px; }
+  .value-grid { grid-template-columns: repeat(3, 1fr); }
+}
