@@ -71,30 +71,26 @@ function normalizeTransaction(data) {
     transaction_id: String(transaction.transaction_id || ""),
     status: String(transaction.status || "").toLowerCase(),
     value: Number(transaction.amount || 0),
-    currency: transaction.currency || "BRL",
     qr_code: transaction.qr_code || "",
     pix_copia_cola: transaction.pix_copia_cola || "",
-    metadata: transaction.metadata || {},
   };
 }
 
 function buildTransactionPayload(input) {
-  return {
+  const payload = {
     amount: Number(input.value),
-    currency: input.currency || "BRL",
-    payment_method: "pix",
-    description: "Doacao Abrigo Sao Francisco",
-    customer: {
-      name: "Doador Abrigo Sao Francisco",
+    user: {
+      name: input.user_name || "Doador Abrigo Sao Francisco",
+      cpf_cnpj: input.cpf_cnpj,
     },
-    metadata: {
-      external_id: input.external_id,
-      event_source_url: input.event_source_url,
-      client_ip_address: input.client_ip_address,
-      client_user_agent: input.client_user_agent,
-      utm: input.utm || {},
-    },
+    notification_url: input.notification_url,
   };
+
+  if (input.payer_phone) {
+    payload.payer_phone = input.payer_phone;
+  }
+
+  return payload;
 }
 
 async function createTransaction(input) {

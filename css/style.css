@@ -288,6 +288,31 @@ a:focus-visible {
   font-size: 0.9rem;
   margin: 0 0 14px;
 }
+.custom-donate__field {
+  max-width: 240px;
+  margin: 0 auto 14px;
+  display: grid;
+  gap: 7px;
+  text-align: left;
+}
+.custom-donate__field span {
+  color: var(--ink-600);
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+.custom-donate__field input {
+  width: 100%;
+  border: 2px solid var(--line);
+  border-radius: 12px;
+  background: var(--bone-50);
+  color: var(--ink-900);
+  font: 700 1rem var(--font-body);
+  padding: 13px 14px;
+}
+.custom-donate__field input:focus {
+  border-color: var(--rescue-500);
+  outline: none;
+}
 .btn-secondary {
   background: var(--pine-800);
   color: var(--bone-100);
@@ -312,6 +337,133 @@ a:focus-visible {
   color: var(--ink-600);
   font-size: 0.78rem;
   margin-top: 22px;
+}
+
+/* ============================================================
+   PIX modal
+   ============================================================ */
+.pix-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 120;
+  display: grid;
+  place-items: center;
+  padding: 18px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.18s ease;
+}
+.pix-modal.is-open {
+  opacity: 1;
+  pointer-events: auto;
+}
+.pix-modal__backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(31, 43, 34, 0.72);
+}
+.pix-modal__panel {
+  position: relative;
+  width: min(100%, 480px);
+  max-height: calc(100vh - 36px);
+  overflow: auto;
+  background: var(--bone-100);
+  border-radius: 22px;
+  box-shadow: 0 28px 70px -28px rgba(0,0,0,0.55);
+  padding: 28px;
+}
+.pix-modal__close {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  width: 36px;
+  height: 36px;
+  border: none;
+  border-radius: 50%;
+  background: var(--bone-50);
+  color: var(--ink-900);
+  font-size: 1.5rem;
+  line-height: 1;
+  cursor: pointer;
+}
+.pix-modal__head {
+  text-align: center;
+  margin-bottom: 18px;
+}
+.pix-modal__eyebrow {
+  margin-bottom: 12px;
+}
+.pix-modal__head h2 {
+  margin: 0 0 8px;
+  color: var(--pine-900);
+  font: 600 1.7rem var(--font-display);
+}
+.pix-modal__head p {
+  margin: 0;
+  color: var(--ink-600);
+  font-size: 0.94rem;
+  line-height: 1.5;
+}
+.pix-status {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  min-height: 74px;
+  color: var(--ink-600);
+  font-weight: 700;
+}
+.pix-status.is-error {
+  color: #9b2f20;
+}
+.pix-content {
+  display: grid;
+  gap: 16px;
+}
+.pix-qr-wrap {
+  width: 232px;
+  min-height: 232px;
+  margin: 0 auto;
+  display: grid;
+  place-items: center;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 12px;
+}
+.pix-qr-wrap img {
+  width: 100%;
+  height: auto;
+  border-radius: 8px;
+}
+.pix-copy {
+  display: grid;
+  gap: 7px;
+}
+.pix-copy span {
+  color: var(--ink-600);
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+.pix-copy textarea {
+  width: 100%;
+  resize: none;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--bone-50);
+  color: var(--ink-900);
+  font: 500 0.82rem var(--font-body);
+  line-height: 1.45;
+  padding: 12px;
+}
+.pix-copy-btn {
+  justify-content: center;
+}
+.pix-waiting {
+  margin: 0;
+  color: var(--ink-600);
+  font-size: 0.84rem;
+  text-align: center;
 }
 
 /* ============================================================
@@ -476,6 +628,42 @@ a:focus-visible {
   margin: 0 auto 22px;
 }
 .site-footer small { font-size: 0.8rem; opacity: 0.7; }
+
+/* ============================================================
+   Thank you page
+   ============================================================ */
+.brand[href] {
+  text-decoration: none;
+}
+.thanks-page {
+  min-height: calc(100vh - 71px);
+  display: grid;
+  place-items: center;
+  background:
+    linear-gradient(180deg, rgba(31,43,34,0.76), rgba(31,43,34,0.9)),
+    url("../images/banner.jpg") center 30% / cover;
+  color: var(--bone-50);
+  padding: 48px 24px;
+}
+.thanks-hero__inner {
+  width: min(100%, 680px);
+  text-align: center;
+}
+.thanks-hero h1 {
+  margin: 0 0 18px;
+  font: 600 clamp(2.3rem, 6vw, 4rem) / 1.04 var(--font-display);
+}
+.thanks-hero p {
+  max-width: 540px;
+  margin: 0 auto 30px;
+  color: rgba(251, 247, 238, 0.88);
+  font-size: 1.08rem;
+  line-height: 1.6;
+}
+.thanks-hero .btn-primary {
+  display: inline-flex;
+  text-decoration: none;
+}
 
 /* ============================================================
    Toast (feedback ao redirecionar)

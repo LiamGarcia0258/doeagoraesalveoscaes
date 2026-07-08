@@ -43,6 +43,29 @@ function getEventSourceUrl(req, fallback) {
   }
 }
 
+function getNotificationUrl(req) {
+  const host = req.headers["x-forwarded-host"] || req.headers.host;
+  const protocol = req.headers["x-forwarded-proto"] || "https";
+
+  if (!host) return undefined;
+
+  return `${protocol}://${host}/api/webhook`;
+}
+
+function normalizeCpfCnpj(value) {
+  if (typeof value !== "string") return "";
+  return value.replace(/\D/g, "");
+}
+
+function normalizePhone(value) {
+  if (typeof value !== "string") return "";
+  return value.replace(/\D/g, "");
+}
+
+function isValidCpfCnpj(value) {
+  return value.length === 11 || value.length === 14;
+}
+
 module.exports = async function handler(req, res) {
   if (req.method !== "POST") {
     res.setHeader("Allow", "POST");
@@ -52,13 +75,21 @@ module.exports = async function handler(req, res) {
   try {
     const body = parseBody(req);
     const value = Number(body.value);
+    const cpfCnpj = normalizeCpfCnpj(body.cpf_cnpj);
 
     if (!Number.isFinite(value) || value < 5) {
       return sendJson(res, 400, { error: "Valor minimo para doacao: R$ 5." });
     }
 
+    if (!isValidCpfCnpj(cpfCnpj)) {
+      return sendJson(res, 400, { error: "Informe CPF com 11 digitos ou CNPJ com 14 digitos." });
+    }
+
     const transaction = await createTransaction({
       value,
+      cpf_cnpj: cpfCnpj,
+      payer_phone: normalizePhone(body.payer_phone),
+      notification_url: getNotificationUrl(req),
       currency: "BRL",
       external_id: limitText(body.external_id, 80),
       event_source_url: getEventSourceUrl(req, body.event_source_url),
