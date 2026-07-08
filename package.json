@@ -1,0 +1,12 @@
+{
+  "name": "abrigo-sao-francisco-checkout-pix",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "start": "vercel dev",
+    "deploy": "vercel deploy --prod"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
