@@ -24,6 +24,9 @@
   fbq('track', 'PageView');
 </script>
 <noscript><img height="1" width="1" style="display:none" src="https://www.facebook.com/tr?id=856184800629236&ev=PageView&noscript=1" /></noscript>
+
+<!-- UTMify - captura e persiste UTMs para atribuição de vendas -->
+<script src="https://cdn.utmify.com.br/scripts/utms/latest.js" data-utmify-prevent-xcod-sck data-utmify-prevent-subids async defer></script>
 </head>
 <body>
 
@@ -73,7 +76,11 @@
       </div>
 
       <div class="custom-donate">
-        <p>Prefere doar outro valor? Escolha livremente direto no checkout seguro.</p>
+        <p>Prefere doar outro valor? Digite abaixo e continue para o pagamento.</p>
+        <label class="custom-donate__field">
+          <span>Valor personalizado</span>
+          <input id="custom-donation-value" type="number" min="5" step="1" inputmode="numeric" placeholder="R$ 80">
+        </label>
         <button class="btn-secondary" data-donate-generic>
           <svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor"><path d="M12 21s-6.7-4.35-9.5-8.1C.7 10.2 1 6.6 4 4.9c2.3-1.3 4.9-.6 6.4 1.2l1.6 2 1.6-2c1.5-1.8 4.1-2.5 6.4-1.2 3 1.7 3.3 5.3 1.5 8-2.8 3.75-9.5 8.1-9.5 8.1z"/></svg>
           Doar agora
@@ -82,7 +89,7 @@
 
       <div class="secure-note">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/></svg>
-        Pagamento processado num checkout seguro
+        Você será redirecionado com segurança para finalizar o pagamento via PIX
       </div>
     </div>
   </div>
@@ -126,7 +133,7 @@
         <button class="faq-item__q">É seguro doar através do site?
           <svg class="chev" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>
         </button>
-        <div class="faq-item__a"><div class="faq-item__a-inner">Sim, totalmente seguro. O pagamento é processado por um checkout parceiro, com criptografia de ponta a ponta. Seus dados financeiros nunca passam pelo nosso site.</div></div>
+        <div class="faq-item__a"><div class="faq-item__a-inner">Sim, totalmente seguro. Ao clicar em doar, você é redirecionado para o checkout oficial da nossa plataforma de pagamentos, onde o PIX é gerado. Seus dados financeiros nunca passam pelo nosso site.</div></div>
       </div>
 
       <div class="faq-item">
@@ -171,7 +178,7 @@
 
 <div class="toast" id="redirect-toast">
   <span class="spinner"></span>
-  Abrindo checkout seguro…
+  Redirecionando para pagamento seguro…
 </div>
 
 <script src="./js/main.js"></script>
