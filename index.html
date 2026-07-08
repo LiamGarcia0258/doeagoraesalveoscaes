@@ -73,11 +73,7 @@
       </div>
 
       <div class="custom-donate">
-        <p>Prefere doar outro valor? Digite abaixo e gere seu PIX na hora.</p>
-        <label class="custom-donate__field">
-          <span>Valor personalizado</span>
-          <input id="custom-donation-value" type="number" min="5" step="1" inputmode="numeric" placeholder="R$ 80">
-        </label>
+        <p>Prefere doar outro valor? Escolha livremente direto no checkout seguro.</p>
         <button class="btn-secondary" data-donate-generic>
           <svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor"><path d="M12 21s-6.7-4.35-9.5-8.1C.7 10.2 1 6.6 4 4.9c2.3-1.3 4.9-.6 6.4 1.2l1.6 2 1.6-2c1.5-1.8 4.1-2.5 6.4-1.2 3 1.7 3.3 5.3 1.5 8-2.8 3.75-9.5 8.1-9.5 8.1z"/></svg>
           Doar agora
@@ -86,37 +82,10 @@
 
       <div class="secure-note">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/></svg>
-        Pagamento via PIX seguro nesta página
+        Pagamento processado num checkout seguro
       </div>
     </div>
   </div>
-</div>
-
-<div class="pix-modal" id="pix-modal" aria-hidden="true">
-  <div class="pix-modal__backdrop" data-close-pix></div>
-  <section class="pix-modal__panel" role="dialog" aria-modal="true" aria-labelledby="pix-modal-title">
-    <button class="pix-modal__close" type="button" data-close-pix aria-label="Fechar">×</button>
-    <div class="pix-modal__head">
-      <span class="eyebrow pix-modal__eyebrow">Pagamento PIX</span>
-      <h2 id="pix-modal-title">Finalize sua doação</h2>
-      <p id="pix-modal-subtitle">Gerando cobrança segura...</p>
-    </div>
-    <div class="pix-status" id="pix-status">
-      <span class="spinner"></span>
-      <span>Aguarde um instante</span>
-    </div>
-    <div class="pix-content" id="pix-content" hidden>
-      <div class="pix-qr-wrap">
-        <img id="pix-qr-image" alt="QR Code PIX para pagamento">
-      </div>
-      <label class="pix-copy">
-        <span>PIX Copia e Cola</span>
-        <textarea id="pix-copy-code" readonly rows="4"></textarea>
-      </label>
-      <button class="btn-secondary pix-copy-btn" type="button" id="copy-pix-code">Copiar código PIX</button>
-      <p class="pix-waiting">Após o pagamento, a confirmação aparece automaticamente.</p>
-    </div>
-  </section>
 </div>
 
 <section class="transparency">
@@ -157,7 +126,7 @@
         <button class="faq-item__q">É seguro doar através do site?
           <svg class="chev" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>
         </button>
-        <div class="faq-item__a"><div class="faq-item__a-inner">Sim, totalmente seguro. O PIX é gerado diretamente nesta página pela integração com o gateway de pagamento. Seus dados financeiros nunca passam pelo nosso site.</div></div>
+        <div class="faq-item__a"><div class="faq-item__a-inner">Sim, totalmente seguro. O pagamento é processado por um checkout parceiro, com criptografia de ponta a ponta. Seus dados financeiros nunca passam pelo nosso site.</div></div>
       </div>
 
       <div class="faq-item">
@@ -202,7 +171,7 @@
 
 <div class="toast" id="redirect-toast">
   <span class="spinner"></span>
-  Preparando PIX seguro…
+  Abrindo checkout seguro…
 </div>
 
 <script src="./js/main.js"></script>
