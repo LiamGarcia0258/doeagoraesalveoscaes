@@ -1,114 +1,136 @@
-# Relatório de Entrega — Landing + Webhook FastDepix → UTMify/Meta
+# Relatorio de Entrega - Landing + Webhook FastDepix -> UTMify/Meta
 
 ## 1. Arquitetura
 
-```
+```text
 Facebook Ads
-   ↓
-Landing Page (index.html + js/main.js)
-   → Pixel Meta dispara (PageView, InitiateCheckout)
-   → UTMify captura UTMs (script cdn.utmify.com.br)
-   → usuário escolhe valor → clica "Doar Agora"
-   → redireciona para https://fastdepix.space/p/P0A33B0B9/sos
-      preservando: utm_*, fbclid, fbc, fbp, ref (UUID gerado no navegador)
-   ↓
-Checkout hospedado pela FastDepix (nome, CPF/CNPJ, telefone, PIX, QR Code — tudo lá)
-   ↓
-Webhook FastDepix → POST /api/webhook (Vercel)
-   → loga headers + query + body completos
-   → procura identificadores conhecidos (utm_*, fbc, fbp, ref, external_id, etc.)
-   → monta pedido e envia para UTMify (POST /api-credentials/orders)
-   → se houver fbc/fbp no payload, envia Purchase para a Meta Conversion API
+   -> Landing Page
+   -> Pixel Meta + Pixel UTMify
+   -> Botao "Doar Agora"
+   -> https://fastdepix.space/p/P0A33B0B9/sos
+   -> Checkout hospedado pela FastDepix
+   -> Webhook FastDepix: POST /api/webhook
+   -> UTMify
+   -> Meta Conversion API, apenas quando houver fbc/fbp real
 ```
 
-A landing **não guarda estado de visitantes em banco de dados**. A
-correlação entre "quem visitou" e "quem pagou" depende inteiramente de a
-FastDepix devolver, no webhook, os parâmetros que enviamos na URL do
-checkout (`ref`, `utm_*`, `fbc`, `fbp`). Isso ainda não foi confirmado —
-ver seção 4.
+A landing continua sem checkout proprio, sem create-pix, sem QR Code local,
+sem CPF na landing e sem modal PIX. A FastDepix segue responsavel por todo o
+checkout hospedado.
 
-## 2. Arquivos alterados
+## 2. Webhook FastDepix
 
-- `index.html` — sem mudanças nesta rodada (já estava sem checkout próprio).
-- `js/main.js` — reescrito: gera `ref` (UUID) por sessão, lê `_fbc`/`_fbp`
-  dos cookies do Pixel, lê `fbclid` e as UTMs estendidas da URL de
-  entrada, monta a URL do checkout da FastDepix com todos esses
-  parâmetros e redireciona.
-- `package.json` — voltou a ter função serverless (`api/webhook.js`),
-  mantido `engines.node >= 18` (necessário pro `fetch` nativo).
+O parser foi reescrito para o payload real observado. A FastDepix nao envia
+`event`, `type`, `event_type` nem `data`; ela envia diretamente o objeto da
+transacao.
 
-## 3. Arquivos criados
+Exemplo esperado:
 
-- `api/webhook.js` — recebe o webhook da FastDepix, loga tudo, extrai
-  identificadores, envia para UTMify e (condicionalmente) para a Meta CAPI.
-- `lib/identifiers.js` — varredura recursiva do payload por campos conhecidos.
-- `lib/utmify.js` — client HTTP para `POST https://api.utmify.com.br/api-credentials/orders`.
-- `lib/meta-capi.js` — client HTTP para a Meta Conversion API (`/events`), com hashing SHA-256 dos dados pessoais.
-- `.env.example` — variáveis de ambiente necessárias (ver seção 5).
+```json
+{
+  "transaction_id": 348516,
+  "status": "pending",
+  "amount": 10,
+  "net_amount": 9.01,
+  "payer_phone": null,
+  "payer_name": null,
+  "created_at": "...",
+  "qr_code": "...",
+  "qr_code_text": "...",
+  "qr_code_expires_at": "..."
+}
+```
 
-## 4. Limitações encontradas na documentação da FastDepix
+Regras implementadas:
 
-A documentação pública da FastDepix **não especifica**:
-
-- o formato exato do payload do webhook (nomes de campo para evento,
-  valor, id da transação, dados do comprador);
-- se ela repassa parâmetros da URL do checkout hospedado (UTMs, fbc,
-  fbp, ref) de volta no webhook, e sob qual chave;
-- se há assinatura/segredo para validar a autenticidade do webhook.
-
-Por isso `api/webhook.js` foi construído em modo "descoberta": ele
-aceita qualquer payload, loga tudo (`console.log` de headers, query e
-body — visível em Vercel → Deployments → Functions → Logs), e faz
-parsing best-effort com nomes de campo alternativos (`amount`,
-`amount_cents`, `priceInCents`, `value`; `event`, `type`, `event_type`
-etc.), marcados com `// TODO` no código.
-
-**Ação necessária de sua parte:** gerar uma transação real (ou de
-teste, se a FastDepix suportar) e me enviar (ou colar aqui) o conteúdo
-bruto dos logs da function `webhook` na Vercel. A partir disso eu ajusto
-os `TODO`s para o schema real, em vez de adivinhar.
-
-## 5. Variáveis de ambiente necessárias na Vercel
-
-| Variável | Onde obter |
+| Campo FastDepix | Uso |
 |---|---|
-| `UTMIFY_API_TOKEN` | UTMify → Integrações → Webhooks → Credenciais de API |
-| `META_PIXEL_ID` | Gerenciador de Eventos do Meta (já é `856184800629236`, usado no `index.html`) |
-| `META_ACCESS_TOKEN` | Gerenciador de Eventos → Configurações → Conversion API → Gerar token |
-| `META_TEST_EVENT_CODE` | opcional, só para testar em "Test Events" |
+| `transaction_id` | Identificador unico da venda/pedido |
+| `status` | Estado da transacao e gatilho da integracao |
+| `amount` | Valor bruto, convertido para centavos |
+| `payer_name`, `payer_phone` | Dados de comprador quando existirem |
 
-## 6. Parâmetros preservados no redirecionamento
+## 3. Logs
 
-Confirmado no código (`js/main.js`): `utm_source`, `utm_campaign`,
-`utm_medium`, `utm_content`, `utm_term`, `utm_id`,
-`utm_source_platform`, `utm_creative_format`, `utm_marketing_tactic`,
-`fbclid`, `fbc`, `fbp`, `ref`.
+`api/webhook.js` registra:
 
-**Não confirmado:** se a FastDepix realmente lê/usa/repassa esses
-parâmetros — a doc dela não fala nada a respeito. Só saberemos
-testando (seção 4).
+- `HEADERS`
+- `QUERY`
+- `BODY`
+- `RAW BODY`
+- identificadores encontrados (`utm_*`, `fbclid`, `fbc`, `fbp`, `ref`,
+  `external_id`, `metadata`, `origin`, etc.)
+- resumo da transacao identificada: `transaction_id`, `status`,
+  status enviado a UTMify e valor em centavos
 
-## 7. Quais dados chegaram no webhook / quais não chegaram
+## 4. UTMify
 
-Ainda **não testado nesta sessão** — não tenho acesso ao seu ambiente
-FastDepix/Vercel em produção para gerar uma transação real. Assim que
-você rodar um teste e me passar os logs, atualizo esta seção com o
-resultado real (o que a FastDepix manda vs. o que não manda).
+A integracao agora usa `status` da transacao, e nao evento.
 
-## 8. UTMify — mapeamento de status
+| `status` FastDepix | Acao | Status enviado a UTMify |
+|---|---|---|
+| `pending` | Criar venda pendente | `waiting_payment` |
+| `approved` | Atualizar para paga | `paid` |
+| `paid` | Confirmar pagamento | `paid` |
+| `refunded` | Atualizar para reembolsada | `refunded` |
 
-| Evento FastDepix (esperado) | Status enviado à UTMify |
+O `orderId` enviado a UTMify e sempre `transaction_id`.
+
+## 5. Meta Conversion API
+
+O Purchase server-side so e enviado quando:
+
+- o status mapeia para pagamento (`approved` ou `paid`);
+- existe valor (`amount`);
+- existe `fbc` ou `fbp` real no webhook/query.
+
+Sem `fbc`/`fbp`, o webhook apenas registra log. Nenhuma correlacao e inventada.
+
+## 6. Correlacao Landing -> venda
+
+Antes de implementar correlacao, foi revisado o material local e feita busca
+publica por documentacao da FastDepix sobre webhook, checkout hospedado `/p/...`,
+UTMs, `ref`, `metadata`, `external_id` e origem da transacao.
+
+Resultado: nao encontrei documentacao publica/indexada que confirme endpoint,
+parametro ou funcionalidade oficial para repassar a origem da transacao criada
+pelo checkout hospedado. Portanto, a implementacao nao criou correlacao baseada
+em suposicao. Ela apenas:
+
+- continua enviando parametros no redirecionamento, caso a FastDepix passe a
+  preserva-los;
+- registra todos os identificadores que eventualmente chegarem;
+- usa esses identificadores somente se aparecerem de fato no webhook/query.
+
+## 7. Arquivos alterados
+
+- `api/webhook.js`: parser refeito para payload direto da transacao, usando
+  `transaction_id` e `status`; removida dependencia de `event`, `type`,
+  `event_type` e `data`.
+- `lib/identifiers.js`: ajuste nos logs de identificadores para ignorar
+  objetos vazios, como `query: {}`.
+- `RELATORIO.md`: documentacao atualizada com o payload real, mapeamento de
+  status e limitacoes da FastDepix.
+
+## 8. Arquivos removidos
+
+Nenhum arquivo do projeto foi removido.
+
+## 9. Variaveis de ambiente
+
+| Variavel | Uso |
 |---|---|
-| `transaction.created` | `waiting_payment` (Pendente) |
-| `transaction.approved` / `transaction.paid` | `paid` (Paga) |
-| `transaction.refunded` | `refunded` (Reembolsada) |
+| `UTMIFY_API_TOKEN` | Enviar pedidos para UTMify |
+| `META_PIXEL_ID` | Pixel usado pela Conversion API |
+| `META_ACCESS_TOKEN` | Token da Meta Conversion API |
+| `META_TEST_EVENT_CODE` | Opcional para testes no Events Manager |
 
-Esses nomes de evento vieram da sua especificação — ainda não
-confirmados contra o payload real da FastDepix.
+## 10. Sugestoes de melhoria
 
-## 9. Meta Conversion API — regra de envio
-
-Só envia `Purchase` quando o webhook chega com `status = paid` **e**
-`fbc` ou `fbp` presentes entre os identificadores extraídos do payload.
-Sem isso, fica só logado como "não enviado" — para não inventar
-correlação entre venda e visitante.
+- Solicitar ao suporte da FastDepix uma confirmacao formal sobre parametros
+  aceitos no checkout hospedado e campos retornados no webhook.
+- Pedir documentacao sobre assinatura/segredo do webhook para validar
+  autenticidade.
+- Se a FastDepix oferecer oficialmente `metadata`, `external_id`, `reference`
+  ou parametro equivalente no checkout hospedado, usar esse recurso para gravar
+  o `ref` da landing e correlacionar a venda sem inferencias.
