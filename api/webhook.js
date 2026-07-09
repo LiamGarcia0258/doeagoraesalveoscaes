@@ -32,8 +32,57 @@ function pick(...values) {
   return values.find((value) => value !== undefined && value !== null && value !== "");
 }
 
-function compactObject(object) {
-  return Object.fromEntries(Object.entries(object).filter(([, value]) => value !== undefined && value !== null && value !== ""));
+function onlyDigits(value) {
+  if (!value) return null;
+  const digits = String(value).replace(/\D/g, "");
+  return digits || null;
+}
+
+function normalizeEmail(value) {
+  if (!value || typeof value !== "string") return null;
+  const email = value.trim().toLowerCase();
+  return email.includes("@") ? email : null;
+}
+
+function syntheticUtmifyEmail(transactionId) {
+  const safeTransactionId = String(transactionId).replace(/[^a-zA-Z0-9._-]/g, "-");
+  return `pix-${safeTransactionId}@tracking.local`;
+}
+
+function findFirstPayloadValue(payload, matcher, depth = 0) {
+  if (!payload || typeof payload !== "object" || depth > 8) return null;
+
+  for (const [key, value] of Object.entries(payload)) {
+    const normalizedKey = key.toLowerCase();
+
+    if (value !== undefined && value !== null && value !== "" && matcher(normalizedKey, value)) {
+      return value;
+    }
+
+    if (value && typeof value === "object") {
+      const nested = findFirstPayloadValue(value, matcher, depth + 1);
+      if (nested !== null && nested !== undefined && nested !== "") return nested;
+    }
+  }
+
+  return null;
+}
+
+function findPayerName(payload) {
+  return findFirstPayloadValue(payload, (key, value) => {
+    if (typeof value !== "string") return false;
+    if (key.includes("product") || key.includes("produto") || key.includes("plan") || key.includes("campaign")) return false;
+    return key === "name" || key === "nome" || key.includes("payer_name") || key.includes("customer_name") || key.includes("client_name") || key.includes("buyer_name") || key.includes("full_name");
+  });
+}
+
+function findPayerDocument(payload) {
+  return onlyDigits(
+    findFirstPayloadValue(payload, (key) => {
+      if (key.includes("qr_code")) return false;
+      return key.includes("cpf") || key.includes("cnpj") || key.includes("document") || key.includes("documento") || key.includes("tax_id");
+    })
+  );
 }
 
 function normalizeStatus(status) {
@@ -161,27 +210,75 @@ module.exports = async function handler(req, res) {
     );
   }
 
-  const customerRaw = transaction.customer || transaction.buyer || transaction.payer || {};
-  const customerName = pick(transaction.payer_name, customerRaw.name, "Doador");
-  const customerPhone = pick(transaction.payer_phone, customerRaw.phone, customerRaw.telefone, null);
-  const customerEmail = pick(transaction.payer_email, customerRaw.email, null);
-  const customerDocument = pick(
+  const customerRaw = transaction.customer || transaction.buyer || transaction.payer || transaction.client || {};
+  const customerName = pick(
+    transaction.payer_name,
+    transaction.customer_name,
+    transaction.client_name,
+    transaction.name,
+    customerRaw.name,
+    findPayerName(transaction),
+    "Doador"
+  );
+  const customerEmail = normalizeEmail(
+    pick(
+      transaction.payer_email,
+      transaction.customer_email,
+      transaction.client_email,
+      transaction.email,
+      customerRaw.email,
+      customerRaw.mail,
+      null
+    )
+  );
+  const customerPhone = onlyDigits(
+    pick(
+      transaction.payer_phone,
+      transaction.customer_phone,
+      transaction.client_phone,
+      transaction.phone,
+      transaction.telefone,
+      customerRaw.phone,
+      customerRaw.telefone,
+      customerRaw.whatsapp,
+      null
+    )
+  );
+  const customerDocument = onlyDigits(pick(
     transaction.payer_document,
     transaction.payer_cpf,
+    transaction.payer_cnpj,
+    transaction.customer_document,
+    transaction.customer_cpf,
+    transaction.customer_cnpj,
+    transaction.client_document,
+    transaction.client_cpf,
+    transaction.client_cnpj,
+    transaction.document,
+    transaction.cpf,
+    transaction.cnpj,
     customerRaw.document,
     customerRaw.cpf,
     customerRaw.cnpj,
+    findPayerDocument(transaction),
     null
-  );
+  ));
 
   if (utmifyStatus && transactionId && amountCents) {
-    const customer = compactObject({
+    const utmifyCustomerEmail = customerEmail || syntheticUtmifyEmail(transactionId);
+    if (!customerEmail) {
+      console.warn(
+        `[utmify] Email nao informado pela FastDepix. Gerando email sintetico: ${utmifyCustomerEmail}`
+      );
+    }
+
+    const customer = {
       name: customerName,
-      email: customerEmail,
+      email: utmifyCustomerEmail,
       phone: customerPhone,
       document: customerDocument,
       country: "BR",
-    });
+    };
 
     console.log(
       "TRACKING UTMIFY:",
