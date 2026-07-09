@@ -1,22 +1,19 @@
 /**
- * Abrigo São Francisco — landing page de doação
+ * Abrigo Sao Francisco - landing page de doacao
  *
- * Esta página NÃO gera PIX, NÃO cria cobranças e NÃO exibe QR Code.
- * O checkout é 100% hospedado pela FastDepix. O papel deste script é:
- *   1) permitir a escolha do valor (para o evento InitiateCheckout do Pixel Meta);
- *   2) montar a URL do checkout da FastDepix preservando os parâmetros
- *      de rastreamento (UTMs, fbclid, fbc, fbp) e um identificador de
- *      visita (ref) gerado no navegador — para tentar correlacionar a
- *      venda mais tarde, caso a FastDepix repasse esses dados no webhook;
- *   3) redirecionar o usuário para lá.
+ * Esta pagina nao gera PIX, nao cria cobrancas e nao exibe QR Code.
+ * O checkout e 100% hospedado pela FastDepix. Este script apenas:
+ *   1) permite a escolha do valor;
+ *   2) preserva UTMs, fbclid, fbc, fbp, ref e visitor_id;
+ *   3) redireciona para o checkout hospedado.
  */
 
 const FASTDEPIX_CHECKOUT_URL = "https://fastdepix.space/p/P0A33B0B9/sos";
 const REF_STORAGE_KEY = "asf_visit_ref";
+const VISITOR_ID_STORAGE_KEY = "asf_visitor_id";
+const VISITOR_ID_COOKIE_NAME = "asf_visitor_id";
+const VISITOR_ID_MAX_AGE_SECONDS = 60 * 60 * 24 * 365;
 
-// Parâmetros que tentamos preservar até o checkout da FastDepix.
-// Se a FastDepix ignorar algum deles, não há problema — é esperado
-// nesta fase de descoberta (ver README/relatório de entrega).
 const UTM_PARAMS = [
   "utm_source",
   "utm_campaign",
@@ -41,18 +38,67 @@ function getCookie(name) {
   return match ? decodeURIComponent(match[1]) : null;
 }
 
+function setCookie(name, value, maxAgeSeconds) {
+  document.cookie = `${name}=${encodeURIComponent(value)}; Max-Age=${maxAgeSeconds}; Path=/; SameSite=Lax`;
+}
+
+function createId() {
+  return crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
+function getLocalStorageValue(key) {
+  try {
+    return localStorage.getItem(key);
+  } catch (error) {
+    return null;
+  }
+}
+
+function setLocalStorageValue(key, value) {
+  try {
+    localStorage.setItem(key, value);
+  } catch (error) {
+    // localStorage indisponivel nao deve impedir o redirecionamento.
+  }
+}
+
+function getOrCreateVisitorId() {
+  const storedVisitorId = getLocalStorageValue(VISITOR_ID_STORAGE_KEY);
+  const cookieVisitorId = getCookie(VISITOR_ID_COOKIE_NAME);
+  const visitorId = storedVisitorId || cookieVisitorId || createId();
+
+  setLocalStorageValue(VISITOR_ID_STORAGE_KEY, visitorId);
+  setCookie(VISITOR_ID_COOKIE_NAME, visitorId, VISITOR_ID_MAX_AGE_SECONDS);
+
+  return visitorId;
+}
+
 function getOrCreateVisitRef() {
   try {
     let ref = sessionStorage.getItem(REF_STORAGE_KEY);
     if (!ref) {
-      ref = crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+      ref = createId();
       sessionStorage.setItem(REF_STORAGE_KEY, ref);
     }
     return ref;
   } catch (error) {
-    // sessionStorage indisponível (ex.: navegação privada) — segue sem persistir.
-    return crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    return createId();
   }
+}
+
+function logTrackingPoint(label, tracking) {
+  console.log(
+    `[tracking] ${label}`,
+    JSON.stringify({
+      visitor_id: tracking.visitor_id || null,
+      transaction_id: tracking.transaction_id || null,
+      ref: tracking.ref || null,
+      fbc: tracking.fbc || null,
+      fbp: tracking.fbp || null,
+      utm_source: tracking.utm_source || null,
+      utm_campaign: tracking.utm_campaign || null,
+    })
+  );
 }
 
 function getTrackingParams() {
@@ -67,8 +113,6 @@ function getTrackingParams() {
   const fbclid = params.get("fbclid");
   if (fbclid) tracking.fbclid = fbclid;
 
-  // _fbc e _fbp são setados automaticamente pelo Pixel do Meta (fbevents.js)
-  // via cookie assim que a página carrega.
   const fbc = getCookie("_fbc");
   if (fbc) tracking.fbc = fbc;
 
@@ -76,6 +120,9 @@ function getTrackingParams() {
   if (fbp) tracking.fbp = fbp;
 
   tracking.ref = getOrCreateVisitRef();
+  tracking.visitor_id = getOrCreateVisitorId();
+
+  logTrackingPoint("landing", tracking);
 
   return tracking;
 }
@@ -88,16 +135,22 @@ function buildFastDepixCheckoutUrl() {
     url.searchParams.set(key, value);
   });
 
+  logTrackingPoint("fastdepix_redirect", tracking);
+
   return url.toString();
 }
 
 function trackDonationIntent(value) {
   try {
+    const tracking = getTrackingParams();
+
     if (window.fbq) {
-      window.fbq("track", "InitiateCheckout", { value, currency: "BRL" });
+      window.fbq("track", "InitiateCheckout", { value, currency: "BRL", visitor_id: tracking.visitor_id });
     }
+
+    logTrackingPoint("meta_pixel_initiate_checkout", tracking);
   } catch (error) {
-    // Falha ao disparar o evento não deve impedir o redirecionamento.
+    // Falha ao disparar o evento nao deve impedir o redirecionamento.
   }
 }
 
@@ -112,7 +165,7 @@ function showToast(text) {
 
 function redirectToCheckout(value) {
   trackDonationIntent(value);
-  showToast(`Redirecionando para o pagamento de ${formatCurrency(value)}…`);
+  showToast(`Redirecionando para o pagamento de ${formatCurrency(value)}...`);
 
   window.setTimeout(() => {
     window.location.href = buildFastDepixCheckoutUrl();
@@ -127,6 +180,8 @@ function handleDonation(value) {
 
   redirectToCheckout(value);
 }
+
+getTrackingParams();
 
 document.querySelectorAll("[data-donate-value]").forEach((btn) => {
   btn.addEventListener("click", () => {

@@ -32,6 +32,10 @@ function pick(...values) {
   return values.find((value) => value !== undefined && value !== null && value !== "");
 }
 
+function compactObject(object) {
+  return Object.fromEntries(Object.entries(object).filter(([, value]) => value !== undefined && value !== null && value !== ""));
+}
+
 function normalizeStatus(status) {
   return typeof status === "string" ? status.trim().toLowerCase() : "";
 }
@@ -120,6 +124,11 @@ module.exports = async function handler(req, res) {
   );
 
   const tracking = {
+    visitor_id: pickIdentifier(identifiers, "visitor_id", "visitorId", "asf_visitor_id", "vid"),
+    ref: pickIdentifier(identifiers, "ref", "reference"),
+    fbclid: pickIdentifier(identifiers, "fbclid"),
+    fbc: pickIdentifier(identifiers, "fbc"),
+    fbp: pickIdentifier(identifiers, "fbp"),
     src: pickIdentifier(identifiers, "src"),
     sck: pickIdentifier(identifiers, "sck"),
     utm_source: pickIdentifier(identifiers, "utm_source"),
@@ -129,10 +138,33 @@ module.exports = async function handler(req, res) {
     utm_term: pickIdentifier(identifiers, "utm_term"),
   };
 
+  console.log(
+    "TRACKING IDENTIFICADO:",
+    JSON.stringify(
+      {
+        visitor_id: tracking.visitor_id || null,
+        transaction_id: transactionId || null,
+        ref: tracking.ref || null,
+        fbc: tracking.fbc || null,
+        fbp: tracking.fbp || null,
+        utm_source: tracking.utm_source || null,
+        utm_campaign: tracking.utm_campaign || null,
+      },
+      null,
+      2
+    )
+  );
+
+  if (transactionId && !tracking.visitor_id) {
+    console.warn(
+      "transaction_id recebido sem visitor_id. Varredura do payload original concluida; nenhum visitor_id foi encontrado."
+    );
+  }
+
   const customerRaw = transaction.customer || transaction.buyer || transaction.payer || {};
   const customerName = pick(transaction.payer_name, customerRaw.name, "Doador");
   const customerPhone = pick(transaction.payer_phone, customerRaw.phone, customerRaw.telefone, null);
-  const customerEmail = pick(transaction.payer_email, customerRaw.email, "nao-informado@abrigosaofrancisco.org");
+  const customerEmail = pick(transaction.payer_email, customerRaw.email, null);
   const customerDocument = pick(
     transaction.payer_document,
     transaction.payer_cpf,
@@ -143,6 +175,27 @@ module.exports = async function handler(req, res) {
   );
 
   if (utmifyStatus && transactionId && amountCents) {
+    const customer = compactObject({
+      name: customerName,
+      email: customerEmail,
+      phone: customerPhone,
+      document: customerDocument,
+      country: "BR",
+    });
+
+    console.log(
+      "TRACKING UTMIFY:",
+      JSON.stringify({
+        visitor_id: tracking.visitor_id || null,
+        transaction_id: transactionId || null,
+        ref: tracking.ref || null,
+        fbc: tracking.fbc || null,
+        fbp: tracking.fbp || null,
+        utm_source: tracking.utm_source || null,
+        utm_campaign: tracking.utm_campaign || null,
+      })
+    );
+
     const utmifyResult = await sendUtmifyOrder({
       orderId: String(transactionId),
       platform: "FastDepix",
@@ -151,13 +204,7 @@ module.exports = async function handler(req, res) {
       createdAt: pick(transaction.created_at, transaction.createdAt, nowUtc()),
       approvedDate: utmifyStatus === "paid" ? pick(transaction.approved_at, transaction.paid_at, nowUtc()) : null,
       refundedAt: utmifyStatus === "refunded" ? pick(transaction.refunded_at, nowUtc()) : null,
-      customer: {
-        name: customerName,
-        email: customerEmail,
-        phone: customerPhone,
-        document: customerDocument,
-        country: "BR",
-      },
+      customer,
       products: [
         {
           id: "doacao-abrigo-sao-francisco",
@@ -184,8 +231,22 @@ module.exports = async function handler(req, res) {
 
   const fbc = pickIdentifier(identifiers, "fbc");
   const fbp = pickIdentifier(identifiers, "fbp");
+  const visitorId = tracking.visitor_id;
 
-  if (utmifyStatus === "paid" && amountCents && (fbc || fbp)) {
+  if (utmifyStatus === "paid" && amountCents && (visitorId || fbc || fbp)) {
+    console.log(
+      "TRACKING META CAPI:",
+      JSON.stringify({
+        visitor_id: visitorId || null,
+        transaction_id: transactionId || null,
+        ref: tracking.ref || null,
+        fbc: fbc || null,
+        fbp: fbp || null,
+        utm_source: tracking.utm_source || null,
+        utm_campaign: tracking.utm_campaign || null,
+      })
+    );
+
     const metaResult = await sendMetaPurchase({
       value: amountCents / 100,
       currency: "BRL",
@@ -194,11 +255,11 @@ module.exports = async function handler(req, res) {
       fbp,
       email: customerEmail,
       phone: customerPhone,
-      externalId: transactionId,
+      externalId: visitorId,
     });
     console.log("RESULTADO META CAPI:", JSON.stringify(metaResult));
   } else if (utmifyStatus === "paid") {
-    console.warn("Purchase nao enviado a Meta CAPI: nenhum fbc/fbp encontrado no payload para correlacionar com o visitante.");
+    console.warn("Purchase nao enviado a Meta CAPI: nenhum visitor_id, fbc ou fbp encontrado no payload para correlacionar com o visitante.");
   }
 
   res.status(200).json({ ok: true, transaction_id: transactionId || null, status: fastDepixStatus || null });

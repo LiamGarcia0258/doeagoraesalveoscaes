@@ -78,13 +78,17 @@ O `orderId` enviado a UTMify e sempre `transaction_id`.
 
 ## 5. Meta Conversion API
 
-O Purchase server-side so e enviado quando:
+O Purchase server-side so e enviado quando existe algum identificador real de
+visitante recebido no webhook/query/payload (`visitor_id`, `fbc` ou `fbp`).
 
-- o status mapeia para pagamento (`approved` ou `paid`);
-- existe valor (`amount`);
-- existe `fbc` ou `fbp` real no webhook/query.
+Regras:
 
-Sem `fbc`/`fbp`, o webhook apenas registra log. Nenhuma correlacao e inventada.
+- `transaction_id` nunca e usado como `external_id` da Meta.
+- Quando existe `visitor_id`, ele e enviado como `external_id`.
+- E-mail so e enviado quando a FastDepix fornece e-mail real. Nenhum e-mail
+  ficticio e usado.
+- Sem `visitor_id`, `fbc` e `fbp`, o webhook apenas registra log. Nenhuma
+  correlacao e inventada.
 
 ## 6. Correlacao Landing -> venda
 
@@ -102,13 +106,26 @@ em suposicao. Ela apenas:
 - registra todos os identificadores que eventualmente chegarem;
 - usa esses identificadores somente se aparecerem de fato no webhook/query.
 
+Nesta versao, a landing gera um `visitor_id` persistente na primeira visita,
+salva em cookie (`asf_visitor_id`) e em `localStorage`, e envia esse valor para
+o checkout hospedado da FastDepix como parametro `visitor_id`. O webhook tenta
+recuperar esse valor da query, do corpo e tambem de strings/URLs presentes no
+payload original da transacao.
+
 ## 7. Arquivos alterados
 
 - `api/webhook.js`: parser refeito para payload direto da transacao, usando
   `transaction_id` e `status`; removida dependencia de `event`, `type`,
-  `event_type` e `data`.
+  `event_type` e `data`; agora extrai/loga `visitor_id`, `ref`, `fbc`, `fbp`,
+  `utm_source` e `utm_campaign`, envia `visitor_id` para UTMify e usa
+  `visitor_id` como `external_id` da Meta.
 - `lib/identifiers.js`: ajuste nos logs de identificadores para ignorar
-  objetos vazios, como `query: {}`.
+  objetos vazios, como `query: {}`; agora tambem extrai identificadores de
+  URLs/query strings dentro do payload.
+- `lib/meta-capi.js`: regra documentada para nunca usar `transaction_id` como
+  `external_id`.
+- `js/main.js`: cria `visitor_id` persistente em cookie/localStorage na
+  primeira visita, envia para FastDepix e registra logs claros do tracking.
 - `RELATORIO.md`: documentacao atualizada com o payload real, mapeamento de
   status e limitacoes da FastDepix.
 
