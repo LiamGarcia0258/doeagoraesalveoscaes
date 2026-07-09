@@ -1,363 +1,310 @@
-/**
- * Webhook da FastDepix.
+/* =============================================================================
+ * api/webhook.js  (Vercel Serverless Function)
+ * -----------------------------------------------------------------------------
+ * Recebe o webhook da FastDepix e repassa a venda para:
+ *   - UTMify  (sempre, usando o status da transação)
+ *   - Meta Conversion API (somente quando há visitor_id/fbc/fbp reais)
  *
- * Este endpoint nao cria PIX, nao gera cobranca e nao implementa checkout.
- * Ele apenas recebe notificacoes da transacao criada no checkout hospedado.
+ * A FastDepix envia DIRETAMENTE o objeto da transação (sem event/type/data).
+ * Exemplo de payload:
+ *   {
+ *     "transaction_id": 348516,
+ *     "status": "pending",
+ *     "amount": 10,
+ *     "net_amount": 9.01,
+ *     "payer_phone": null,
+ *     "payer_name": null,
+ *     "created_at": "...",
+ *     "qr_code": "...",
+ *     "qr_code_text": "...",
+ *     "qr_code_expires_at": "..."
+ *   }
+ * ========================================================================== */
+
+"use strict";
+
+var crypto = require("crypto");
+var identifiersLib = require("../lib/identifiers");
+var utmify = require("../lib/utmify");
+var metaCapi = require("../lib/meta-capi");
+var kv = require("../lib/kv");
+
+/* ---------------------------------------------------------------------------
+ * Validação da assinatura HMAC-SHA256 do webhook (segurança), conforme a doc
+ * oficial da FastDepix:
+ *   Header:  X-Webhook-Signature: sha256=<hash>
+ *   hash  =  HMAC_SHA256(rawBody, FASTDEPIX_WEBHOOK_SECRET)
  *
- * O payload real observado nao vem envelopado em event/type/event_type/data.
- * A FastDepix envia diretamente o objeto da transacao:
- * { transaction_id, status, amount, net_amount, payer_name, payer_phone, ... }.
- *
- * Por isso este parser usa transaction_id como identificador unico e status
- * como o estado da transacao. Logs completos continuam ativos para auditoria
- * e para confirmar se algum identificador oficial de origem aparece no futuro.
- */
-
-const { findIdentifiers, pickIdentifier } = require("../lib/identifiers");
-const { sendUtmifyOrder } = require("../lib/utmify");
-const { sendMetaPurchase } = require("../lib/meta-capi");
-
-const FASTDEPIX_STATUS_TO_UTMIFY_STATUS = {
-  pending: "waiting_payment",
-  approved: "paid",
-  paid: "paid",
-  refunded: "refunded",
-};
-
-function nowUtc() {
-  return new Date().toISOString().slice(0, 19).replace("T", " ");
-}
-
-function pick(...values) {
-  return values.find((value) => value !== undefined && value !== null && value !== "");
-}
-
-function onlyDigits(value) {
-  if (!value) return null;
-  const digits = String(value).replace(/\D/g, "");
-  return digits || null;
-}
-
-function normalizeEmail(value) {
-  if (!value || typeof value !== "string") return null;
-  const email = value.trim().toLowerCase();
-  return email.includes("@") ? email : null;
-}
-
-function syntheticUtmifyEmail(transactionId) {
-  const safeTransactionId = String(transactionId).replace(/[^a-zA-Z0-9._-]/g, "-");
-  return `pix-${safeTransactionId}@tracking.local`;
-}
-
-function findFirstPayloadValue(payload, matcher, depth = 0) {
-  if (!payload || typeof payload !== "object" || depth > 8) return null;
-
-  for (const [key, value] of Object.entries(payload)) {
-    const normalizedKey = key.toLowerCase();
-
-    if (value !== undefined && value !== null && value !== "" && matcher(normalizedKey, value)) {
-      return value;
-    }
-
-    if (value && typeof value === "object") {
-      const nested = findFirstPayloadValue(value, matcher, depth + 1);
-      if (nested !== null && nested !== undefined && nested !== "") return nested;
-    }
+ * - Se FASTDEPIX_WEBHOOK_SECRET estiver configurada, a assinatura é EXIGIDA:
+ *   requisições sem assinatura ou com assinatura inválida são rejeitadas (401).
+ * - Se o segredo NÃO estiver configurado, a validação é apenas registrada em
+ *   log (permite testar antes de cadastrar o segredo no painel/Vercel).
+ * ------------------------------------------------------------------------- */
+function verifyWebhookSignature(req, rawBody) {
+  var secret = process.env.FASTDEPIX_WEBHOOK_SECRET || "";
+  if (!secret) {
+    console.warn("[ASF][Webhook] FASTDEPIX_WEBHOOK_SECRET ausente — assinatura NÃO verificada (configure para produção).");
+    return { ok: true, verified: false, reason: "no_secret" };
   }
 
-  return null;
+  var received = req.headers["x-webhook-signature"] || req.headers["X-Webhook-Signature"] || "";
+  if (!received) {
+    return { ok: false, verified: false, reason: "missing_signature" };
+  }
+
+  var expected = "sha256=" + crypto.createHmac("sha256", secret).update(rawBody || "", "utf8").digest("hex");
+
+  // Comparação em tempo constante (evita timing attacks).
+  var a = Buffer.from(String(received));
+  var b = Buffer.from(expected);
+  var valid = a.length === b.length && crypto.timingSafeEqual(a, b);
+
+  return { ok: valid, verified: valid, reason: valid ? "valid" : "invalid_signature" };
 }
 
-function findPayerName(payload) {
-  return findFirstPayloadValue(payload, (key, value) => {
-    if (typeof value !== "string") return false;
-    if (key.includes("product") || key.includes("produto") || key.includes("plan") || key.includes("campaign")) return false;
-    return key === "name" || key === "nome" || key.includes("payer_name") || key.includes("customer_name") || key.includes("client_name") || key.includes("buyer_name") || key.includes("full_name");
+/* ---------------------------------------------------------------------------
+ * Mapeamento de status FastDepix -> UTMify
+ * ------------------------------------------------------------------------- */
+var STATUS_MAP = {
+  pending: "waiting_payment",
+  waiting_payment: "waiting_payment",
+  approved: "paid",
+  paid: "paid",
+  completed: "paid",
+  refunded: "refunded",
+  chargeback: "refunded",
+  refused: "refused",
+  canceled: "refused",
+  cancelled: "refused",
+  failed: "refused",
+  expired: "refused"
+};
+
+function mapStatus(rawStatus) {
+  if (!rawStatus) return null;
+  var key = String(rawStatus).trim().toLowerCase();
+  return STATUS_MAP[key] || null;
+}
+
+/* ---------------------------------------------------------------------------
+ * Lê o corpo bruto da requisição (stream).
+ * ------------------------------------------------------------------------- */
+function readRawBody(req) {
+  return new Promise(function (resolve) {
+    var chunks = [];
+    req.on("data", function (c) { chunks.push(c); });
+    req.on("end", function () {
+      resolve(Buffer.concat(chunks).toString("utf8"));
+    });
+    req.on("error", function () { resolve(""); });
   });
 }
 
-function findPayerDocument(payload) {
-  return onlyDigits(
-    findFirstPayloadValue(payload, (key) => {
-      if (key.includes("qr_code")) return false;
-      return key.includes("cpf") || key.includes("cnpj") || key.includes("document") || key.includes("documento") || key.includes("tax_id");
-    })
-  );
+function safeJsonParse(str) {
+  if (!str) return null;
+  try { return JSON.parse(str); } catch (e) { return null; }
 }
 
-function normalizeStatus(status) {
-  return typeof status === "string" ? status.trim().toLowerCase() : "";
+/* ---------------------------------------------------------------------------
+ * Extrai o objeto da transação do payload.
+ * A FastDepix manda o objeto direto, mas por segurança lidamos com o caso de
+ * vir aninhado (data/transaction/order).
+ * ------------------------------------------------------------------------- */
+function extractTransaction(body) {
+  if (!body || typeof body !== "object") return {};
+  if (body.transaction_id !== undefined || body.status !== undefined) return body;
+  if (body.data && typeof body.data === "object") return body.data;
+  if (body.transaction && typeof body.transaction === "object") return body.transaction;
+  if (body.order && typeof body.order === "object") return body.order;
+  return body;
 }
 
-function centsFromAmount(value) {
-  if (typeof value === "number" && Number.isFinite(value)) return Math.round(value * 100);
-
-  if (typeof value === "string" && value.trim() !== "") {
-    const normalized = Number(value.replace(",", "."));
-    if (Number.isFinite(normalized)) return Math.round(normalized * 100);
-  }
-
-  return undefined;
+function toCents(amount) {
+  var n = Number(amount);
+  if (isNaN(n)) return 0;
+  return Math.round(n * 100);
 }
 
-function extractBody(body) {
-  if (!body) return {};
-  if (typeof body !== "string") return body;
-
-  try {
-    return JSON.parse(body);
-  } catch (error) {
-    console.warn("BODY recebido como string, mas nao era JSON valido.");
-    return {};
-  }
+function firstIp(req) {
+  var xff = req.headers["x-forwarded-for"];
+  if (xff) return String(xff).split(",")[0].trim();
+  return (req.socket && req.socket.remoteAddress) || null;
 }
 
-function rawBodyForLog(body) {
-  if (typeof body === "string") return body;
-
-  try {
-    return JSON.stringify(body);
-  } catch (error) {
-    return "[raw body unavailable: serialization failed]";
-  }
-}
-
+/* ---------------------------------------------------------------------------
+ * Handler principal
+ * ------------------------------------------------------------------------- */
 module.exports = async function handler(req, res) {
+  // A FastDepix pode fazer um GET/HEAD de verificação — respondemos 200.
   if (req.method !== "POST") {
-    res.status(405).json({ error: "method_not_allowed" });
+    res.status(200).json({ ok: true, message: "Webhook ativo. Use POST." });
     return;
   }
 
-  const headers = req.headers || {};
-  const query = req.query || {};
-  const rawBody = rawBodyForLog(req.body);
-  const body = extractBody(req.body);
-  const transaction = body;
+  var rawBody = await readRawBody(req);
 
-  console.log("=== FASTDEPIX WEBHOOK RECEBIDO ===", new Date().toISOString());
-  console.log("HEADERS", JSON.stringify(headers, null, 2));
-  console.log("QUERY", JSON.stringify(query, null, 2));
-  console.log("BODY", JSON.stringify(body, null, 2));
-  console.log("RAW BODY", rawBody);
+  // --- Segurança: valida a assinatura HMAC ANTES de qualquer processamento ---
+  var sig = verifyWebhookSignature(req, rawBody);
+  if (!sig.ok) {
+    console.warn("[ASF][Webhook] Assinatura rejeitada:", sig.reason);
+    res.status(401).json({ ok: false, error: "invalid_signature" });
+    return;
+  }
+  console.log("[ASF][Webhook] Assinatura:", sig.reason);
 
-  const identifiers = findIdentifiers({ query, body });
-  if (Object.keys(identifiers).length > 0) {
-    console.log("IDENTIFICADORES ENCONTRADOS:", JSON.stringify(identifiers, null, 2));
-  } else {
-    console.log("Nenhum identificador conhecido encontrado neste payload.");
+  var parsedBody = safeJsonParse(rawBody);
+
+  // Se não for JSON, tenta como form-urlencoded.
+  if (!parsedBody && rawBody && rawBody.indexOf("=") !== -1) {
+    parsedBody = identifiersLib.parseQueryString(rawBody);
   }
 
-  const fastDepixStatus = normalizeStatus(transaction.status);
-  const utmifyStatus = FASTDEPIX_STATUS_TO_UTMIFY_STATUS[fastDepixStatus];
-  const transactionId = pick(transaction.transaction_id, transaction.id);
-  const amountCents = pick(
-    transaction.amount_cents,
-    transaction.amountInCents,
-    transaction.priceInCents,
-    centsFromAmount(transaction.amount),
-    centsFromAmount(transaction.value)
-  );
+  var query = req.query || {};
+
+  /* ----------------------------- LOGS ---------------------------------- */
+  console.log("[ASF][Webhook] ===== NOVO WEBHOOK =====");
+  console.log("[ASF][Webhook] HEADERS:", JSON.stringify(req.headers));
+  var compactQuery = identifiersLib.compact(query);
+  console.log("[ASF][Webhook] QUERY:", compactQuery ? JSON.stringify(compactQuery) : "(vazio)");
+  console.log("[ASF][Webhook] BODY:", parsedBody ? JSON.stringify(parsedBody) : "(não-JSON)");
+  console.log("[ASF][Webhook] RAW BODY:", rawBody || "(vazio)");
+
+  /* ----------------------- Transação + identificadores ------------------ */
+  var tx = extractTransaction(parsedBody || {});
+
+  var identifiers = identifiersLib.collectIdentifiers({
+    query: query,
+    body: parsedBody,
+    payload: tx
+  });
+  var compactIds = identifiersLib.compact(identifiers);
+  console.log("[ASF][Webhook] IDENTIFICADORES:", compactIds ? JSON.stringify(compactIds) : "(nenhum)");
+
+  var transactionId = tx.transaction_id != null ? String(tx.transaction_id) : null;
+  var rawStatus = tx.status || null;
+  var mappedStatus = mapStatus(rawStatus);
+  var valueInCents = toCents(tx.amount);
+  var valueInReais = Number(tx.amount) || 0;
 
   console.log(
-    "TRANSACAO IDENTIFICADA:",
-    JSON.stringify(
-      {
-        transaction_id: transactionId || null,
-        status: fastDepixStatus || null,
-        utmify_status: utmifyStatus || null,
-        amount_cents: amountCents || null,
-      },
-      null,
-      2
-    )
+    "[ASF][Webhook] RESUMO -> transaction_id:", transactionId,
+    "| status FastDepix:", rawStatus,
+    "| status UTMify:", mappedStatus,
+    "| valor(centavos):", valueInCents
   );
 
-  const tracking = {
-    visitor_id: pickIdentifier(identifiers, "visitor_id", "visitorId", "asf_visitor_id", "vid"),
-    ref: pickIdentifier(identifiers, "ref", "reference"),
-    fbclid: pickIdentifier(identifiers, "fbclid"),
-    fbc: pickIdentifier(identifiers, "fbc"),
-    fbp: pickIdentifier(identifiers, "fbp"),
-    src: pickIdentifier(identifiers, "src"),
-    sck: pickIdentifier(identifiers, "sck"),
-    utm_source: pickIdentifier(identifiers, "utm_source"),
-    utm_campaign: pickIdentifier(identifiers, "utm_campaign"),
-    utm_medium: pickIdentifier(identifiers, "utm_medium"),
-    utm_content: pickIdentifier(identifiers, "utm_content"),
-    utm_term: pickIdentifier(identifiers, "utm_term"),
-  };
-
-  console.log(
-    "TRACKING IDENTIFICADO:",
-    JSON.stringify(
-      {
-        visitor_id: tracking.visitor_id || null,
-        transaction_id: transactionId || null,
-        ref: tracking.ref || null,
-        fbc: tracking.fbc || null,
-        fbp: tracking.fbp || null,
-        utm_source: tracking.utm_source || null,
-        utm_campaign: tracking.utm_campaign || null,
-      },
-      null,
-      2
-    )
-  );
-
-  if (transactionId && !tracking.visitor_id) {
-    console.warn(
-      "transaction_id recebido sem visitor_id. Varredura do payload original concluida; nenhum visitor_id foi encontrado."
-    );
+  // Sem transaction_id ou status reconhecível, não temos o que processar.
+  if (!transactionId || !mappedStatus) {
+    console.warn("[ASF][Webhook] transaction_id ou status ausente/desconhecido — apenas logado.");
+    res.status(200).json({ ok: true, ignored: true, reason: "missing_transaction_or_status" });
+    return;
   }
 
-  const customerRaw = transaction.customer || transaction.buyer || transaction.payer || transaction.client || {};
-  const customerName = pick(
-    transaction.payer_name,
-    transaction.customer_name,
-    transaction.client_name,
-    transaction.name,
-    customerRaw.name,
-    findPayerName(transaction),
-    "Doador"
-  );
-  const customerEmail = normalizeEmail(
-    pick(
-      transaction.payer_email,
-      transaction.customer_email,
-      transaction.client_email,
-      transaction.email,
-      customerRaw.email,
-      customerRaw.mail,
-      null
-    )
-  );
-  const customerPhone = onlyDigits(
-    pick(
-      transaction.payer_phone,
-      transaction.customer_phone,
-      transaction.client_phone,
-      transaction.phone,
-      transaction.telefone,
-      customerRaw.phone,
-      customerRaw.telefone,
-      customerRaw.whatsapp,
-      null
-    )
-  );
-  const customerDocument = onlyDigits(pick(
-    transaction.payer_document,
-    transaction.payer_cpf,
-    transaction.payer_cnpj,
-    transaction.customer_document,
-    transaction.customer_cpf,
-    transaction.customer_cnpj,
-    transaction.client_document,
-    transaction.client_cpf,
-    transaction.client_cnpj,
-    transaction.document,
-    transaction.cpf,
-    transaction.cnpj,
-    customerRaw.document,
-    customerRaw.cpf,
-    customerRaw.cnpj,
-    findPayerDocument(transaction),
-    null
-  ));
-
-  if (utmifyStatus && transactionId && amountCents) {
-    const utmifyCustomerEmail = customerEmail || syntheticUtmifyEmail(transactionId);
-    if (!customerEmail) {
-      console.warn(
-        `[utmify] Email nao informado pela FastDepix. Gerando email sintetico: ${utmifyCustomerEmail}`
-      );
+  /* --------------------- Recupera tracking do KV ----------------------- */
+  // O tracking foi salvo por api/create-transaction.js no momento da criação
+  // do PIX. Aqui recuperamos por transaction_id e mesclamos.
+  // Prioridade: o que já veio no payload/query (mais fresco) vence; o KV
+  // preenche o que estiver faltando (que é o caso normal, pois a FastDepix
+  // normalmente não devolve visitor_id/fbc/fbp no webhook).
+  var kvSource = "none";
+  try {
+    var stored = await kv.getJSON(kv.trackingKey(transactionId));
+    if (stored && stored.tracking) {
+      kvSource = "kv";
+      Object.keys(stored.tracking).forEach(function (k) {
+        var v = stored.tracking[k];
+        if (v != null && String(v).trim() !== "" && (identifiers[k] == null || String(identifiers[k]).trim() === "")) {
+          identifiers[k] = v;
+        }
+      });
+      console.log("[ASF][Webhook] Tracking recuperado do KV:", JSON.stringify(stored.tracking));
+    } else {
+      console.log("[ASF][Webhook] Nenhum tracking no KV para", transactionId);
     }
+  } catch (err) {
+    console.error("[ASF][Webhook] Erro ao ler KV:", err && err.message);
+  }
+  console.log("[ASF][Webhook] IDENTIFICADORES (pós-KV / origem=" + kvSource + "):",
+    JSON.stringify(identifiersLib.compact(identifiers) || {}));
 
-    const customer = {
-      name: customerName,
-      email: utmifyCustomerEmail,
-      phone: customerPhone,
-      document: customerDocument,
-      country: "BR",
-    };
+  /* ------------------------------- UTMify ------------------------------ */
+  var order = utmify.buildOrderPayload({
+    orderId: transactionId,
+    status: mappedStatus,
+    valueInCents: valueInCents,
+    createdAt: tx.created_at || new Date(),
+    approvedDate: tx.paid_at || tx.approved_at || tx.updated_at || new Date(),
+    customer: {
+      name: tx.payer_name || null,
+      email: tx.payer_email || tx.email || null,
+      phone: tx.payer_phone || null,
+      document: tx.payer_document || tx.document || null,
+      ip: firstIp(req)
+    },
+    tracking: {
+      utm_source: identifiers.utm_source || null,
+      utm_medium: identifiers.utm_medium || null,
+      utm_campaign: identifiers.utm_campaign || null,
+      utm_content: identifiers.utm_content || null,
+      utm_term: identifiers.utm_term || null,
+      src: identifiers.src || null,
+      sck: identifiers.sck || null
+    },
+    isTest: false
+  });
 
-    console.log(
-      "TRACKING UTMIFY:",
-      JSON.stringify({
-        visitor_id: tracking.visitor_id || null,
-        transaction_id: transactionId || null,
-        ref: tracking.ref || null,
-        fbc: tracking.fbc || null,
-        fbp: tracking.fbp || null,
-        utm_source: tracking.utm_source || null,
-        utm_campaign: tracking.utm_campaign || null,
-      })
-    );
+  // Envia visitor_id como referência extra dentro do pedido (rastreável nos logs).
+  if (identifiers.visitor_id) {
+    order.visitor_id = identifiers.visitor_id;
+  }
 
-    const utmifyResult = await sendUtmifyOrder({
-      orderId: String(transactionId),
-      platform: "FastDepix",
-      paymentMethod: "pix",
-      status: utmifyStatus,
-      createdAt: pick(transaction.created_at, transaction.createdAt, nowUtc()),
-      approvedDate: utmifyStatus === "paid" ? pick(transaction.approved_at, transaction.paid_at, nowUtc()) : null,
-      refundedAt: utmifyStatus === "refunded" ? pick(transaction.refunded_at, nowUtc()) : null,
-      customer,
-      products: [
-        {
-          id: "doacao-abrigo-sao-francisco",
-          name: "Doacao - Abrigo Sao Francisco",
-          planId: null,
-          planName: null,
-          quantity: 1,
-          priceInCents: amountCents,
-        },
-      ],
-      trackingParameters: tracking,
-      commission: {
-        totalPriceInCents: amountCents,
-        gatewayFeeInCents: 0,
-        userCommissionInCents: amountCents,
+  var utmifyResult = await utmify.sendOrder(order, process.env.UTMIFY_API_TOKEN);
+
+  /* ---------------------------- Meta CAPI ------------------------------ */
+  // Purchase server-side SOMENTE quando pago e com identificador real.
+  var metaResult = { skipped: true, reason: "not_paid" };
+  if (mappedStatus === "paid") {
+    metaResult = await metaCapi.sendPurchase({
+      pixelId: process.env.META_PIXEL_ID,
+      accessToken: process.env.META_ACCESS_TOKEN,
+      testEventCode: process.env.META_TEST_EVENT_CODE || null,
+      identifiers: {
+        visitor_id: identifiers.visitor_id || null,
+        fbc: identifiers.fbc || null,
+        fbp: identifiers.fbp || null
       },
-    });
-    console.log("RESULTADO UTMIFY:", JSON.stringify(utmifyResult));
-  } else {
-    console.warn(
-      "Dados insuficientes para enviar pedido a UTMify (faltando transaction_id, amountCents ou status mapeavel). Apenas logado."
-    );
-  }
-
-  const fbc = pickIdentifier(identifiers, "fbc");
-  const fbp = pickIdentifier(identifiers, "fbp");
-  const visitorId = tracking.visitor_id;
-
-  if (utmifyStatus === "paid" && amountCents && (visitorId || fbc || fbp)) {
-    console.log(
-      "TRACKING META CAPI:",
-      JSON.stringify({
-        visitor_id: visitorId || null,
-        transaction_id: transactionId || null,
-        ref: tracking.ref || null,
-        fbc: fbc || null,
-        fbp: fbp || null,
-        utm_source: tracking.utm_source || null,
-        utm_campaign: tracking.utm_campaign || null,
-      })
-    );
-
-    const metaResult = await sendMetaPurchase({
-      value: amountCents / 100,
+      value: valueInReais,
       currency: "BRL",
+      // event_id = transaction_id para deduplicar com o Pixel (mas NUNCA como external_id).
       eventId: transactionId,
-      fbc,
-      fbp,
-      email: customerEmail,
-      phone: customerPhone,
-      externalId: visitorId,
+      email: tx.payer_email || tx.email || null,
+      phone: tx.payer_phone || null,
+      name: tx.payer_name || null,
+      clientIp: firstIp(req),
+      clientUserAgent: req.headers["user-agent"] || null
     });
-    console.log("RESULTADO META CAPI:", JSON.stringify(metaResult));
-  } else if (utmifyStatus === "paid") {
-    console.warn("Purchase nao enviado a Meta CAPI: nenhum visitor_id, fbc ou fbp encontrado no payload para correlacionar com o visitante.");
+  } else {
+    console.log("[ASF][Meta] Status não é 'paid' (" + mappedStatus + ") — Purchase não enviado.");
   }
 
-  res.status(200).json({ ok: true, transaction_id: transactionId || null, status: fastDepixStatus || null });
+  /* ------------------------------ Resposta ----------------------------- */
+  res.status(200).json({
+    ok: true,
+    transaction_id: transactionId,
+    status_fastdepix: rawStatus,
+    status_utmify: mappedStatus,
+    value_cents: valueInCents,
+    utmify: { ok: utmifyResult.ok, status: utmifyResult.status },
+    meta: metaResult.skipped
+      ? { skipped: true, reason: metaResult.reason }
+      : { ok: metaResult.ok, status: metaResult.status }
+  });
+};
+
+// Desliga o body parser padrão do Vercel para conseguirmos ler o RAW BODY.
+// (Definido DEPOIS do module.exports do handler para não ser sobrescrito.)
+module.exports.config = {
+  api: {
+    bodyParser: false
+  }
 };
