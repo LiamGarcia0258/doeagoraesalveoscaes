@@ -2,9 +2,12 @@
   "name": "abrigo-sao-francisco-landing",
   "version": "1.0.0",
   "private": true,
-  "description": "Landing page de doação do Abrigo São Francisco. Site estático que redireciona para o checkout hospedado da FastDepix, preservando UTMs, Pixel Meta e UTMify.",
+  "description": "Landing page de doação do Abrigo São Francisco. Redireciona para o checkout hospedado da FastDepix, preservando UTMs/fbclid/fbc/fbp, e recebe o webhook da FastDepix para repassar o status da venda para UTMify e Meta Conversion API.",
   "scripts": {
-    "start": "npx serve .",
+    "start": "vercel dev",
     "deploy": "vercel deploy --prod"
+  },
+  "engines": {
+    "node": ">=18"
   }
 }
