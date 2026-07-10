@@ -272,146 +272,10 @@
     });
   }
 
-  /* ------------------- coleta de dados exigidos pela API --------------- */
-  // A DePix (motor da FastDepix) exige Nome + CPF/CNPJ do pagador em TODA
-  // transação. Coletamos apenas o mínimo, num passo enxuto dentro do modal.
-
-  // Só dígitos.
-  function onlyDigits(s) { return String(s || "").replace(/\D/g, ""); }
-
-  // Máscara CPF (000.000.000-00) / CNPJ (00.000.000/0000-00) conforme digita.
-  function maskCpfCnpj(v) {
-    var d = onlyDigits(v).slice(0, 14);
-    if (d.length <= 11) {
-      return d
-        .replace(/^(\d{3})(\d)/, "$1.$2")
-        .replace(/^(\d{3})\.(\d{3})(\d)/, "$1.$2.$3")
-        .replace(/\.(\d{3})(\d)/, ".$1-$2");
-    }
-    return d
-      .replace(/^(\d{2})(\d)/, "$1.$2")
-      .replace(/^(\d{2})\.(\d{3})(\d)/, "$1.$2.$3")
-      .replace(/\.(\d{3})(\d)/, ".$1/$2")
-      .replace(/(\d{4})(\d)/, "$1-$2");
-  }
-
-  // Validação de CPF (dígitos verificadores).
-  function isValidCPF(cpf) {
-    cpf = onlyDigits(cpf);
-    if (cpf.length !== 11 || /^(\d)\1{10}$/.test(cpf)) return false;
-    var i, sum = 0, rest;
-    for (i = 1; i <= 9; i++) sum += parseInt(cpf.substring(i - 1, i), 10) * (11 - i);
-    rest = (sum * 10) % 11; if (rest === 10 || rest === 11) rest = 0;
-    if (rest !== parseInt(cpf.substring(9, 10), 10)) return false;
-    sum = 0;
-    for (i = 1; i <= 10; i++) sum += parseInt(cpf.substring(i - 1, i), 10) * (12 - i);
-    rest = (sum * 10) % 11; if (rest === 10 || rest === 11) rest = 0;
-    return rest === parseInt(cpf.substring(10, 11), 10);
-  }
-
-  // Validação de CNPJ (dígitos verificadores).
-  function isValidCNPJ(cnpj) {
-    cnpj = onlyDigits(cnpj);
-    if (cnpj.length !== 14 || /^(\d)\1{13}$/.test(cnpj)) return false;
-    var calc = function (base) {
-      var len = base.length, pos = len - 7, sum = 0, i;
-      for (i = len; i >= 1; i--) {
-        sum += parseInt(base.charAt(len - i), 10) * pos--;
-        if (pos < 2) pos = 9;
-      }
-      var r = sum % 11;
-      return r < 2 ? 0 : 11 - r;
-    };
-    var d1 = calc(cnpj.substring(0, 12));
-    if (d1 !== parseInt(cnpj.charAt(12), 10)) return false;
-    var d2 = calc(cnpj.substring(0, 13));
-    return d2 === parseInt(cnpj.charAt(13), 10);
-  }
-
-  function isValidDoc(v) {
-    var d = onlyDigits(v);
-    if (d.length === 11) return isValidCPF(d);
-    if (d.length === 14) return isValidCNPJ(d);
-    return false;
-  }
-
-  function formHtml(valueInReais) {
-    return (
-      '<div class="pix-form">' +
-        '<span class="eyebrow">Quase lá</span>' +
-        '<h3>Doação de R$ ' + formatBRL(valueInReais) + '</h3>' +
-        '<p>Precisamos só do seu nome e CPF/CNPJ para gerar o PIX com segurança.</p>' +
-        '<label class="pix-field">' +
-          '<span>Nome completo</span>' +
-          '<input type="text" id="pix-name" autocomplete="name" placeholder="Seu nome" maxlength="80">' +
-        '</label>' +
-        '<label class="pix-field">' +
-          '<span>CPF ou CNPJ</span>' +
-          '<input type="text" id="pix-doc" inputmode="numeric" autocomplete="off" placeholder="000.000.000-00" maxlength="18">' +
-        '</label>' +
-        '<p class="pix-form-error" id="pix-form-error" hidden></p>' +
-        '<button class="btn-primary" id="pix-form-submit" type="button" style="width:100%">Gerar PIX</button>' +
-        '<p class="pix-hint">🔒 Seus dados vão direto e com segurança para o processador de pagamento.</p>' +
-      '</div>'
-    );
-  }
-
-  function startDonation(valueInReais) {
-    var value = Number(valueInReais);
-    if (isNaN(value) || value < CONFIG.MIN_VALUE || value > CONFIG.MAX_VALUE) return;
-
-    openModal(formHtml(value));
-
-    var nameInput = document.getElementById("pix-name");
-    var docInput = document.getElementById("pix-doc");
-    var errEl = document.getElementById("pix-form-error");
-    var submit = document.getElementById("pix-form-submit");
-
-    if (docInput) {
-      docInput.addEventListener("input", function () {
-        var pos = docInput.value.length;
-        docInput.value = maskCpfCnpj(docInput.value);
-        if (pos >= docInput.value.length) docInput.setSelectionRange(docInput.value.length, docInput.value.length);
-      });
-    }
-
-    function showErr(msg) {
-      if (!errEl) return;
-      errEl.textContent = msg;
-      errEl.hidden = false;
-    }
-
-    function trySubmit() {
-      var name = (nameInput && nameInput.value || "").trim();
-      var doc = onlyDigits(docInput && docInput.value);
-
-      if (name.length < 3 || name.indexOf(" ") === -1) {
-        showErr("Digite seu nome completo.");
-        if (nameInput) nameInput.focus();
-        return;
-      }
-      if (!isValidDoc(doc)) {
-        showErr("CPF/CNPJ inválido. Confira os números.");
-        if (docInput) docInput.focus();
-        return;
-      }
-      if (errEl) errEl.hidden = true;
-      createPix(value, { name: name, cpf_cnpj: doc });
-    }
-
-    if (submit) submit.addEventListener("click", trySubmit);
-    if (docInput) {
-      docInput.addEventListener("keydown", function (e) {
-        if (e.key === "Enter" || e.keyCode === 13) { e.preventDefault(); trySubmit(); }
-      });
-    }
-    if (nameInput) setTimeout(function () { nameInput.focus(); }, 100);
-  }
-
   /* ------------------------ criação do PIX (API) ----------------------- */
   var creating = false;
 
-  function createPix(valueInReais, customer) {
+  function createPix(valueInReais) {
     if (creating) return;
     creating = true;
 
@@ -429,7 +293,7 @@
     fetch(CONFIG.CREATE_ENDPOINT, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ amount: Number(valueInReais), tracking: tracking, customer: customer || {} })
+      body: JSON.stringify({ amount: Number(valueInReais), tracking: tracking })
     })
       .then(function (res) {
         return res.json().then(function (json) { return { ok: res.ok, json: json }; });
@@ -482,7 +346,7 @@
     var buttons = document.querySelectorAll("[data-donate-value]");
     for (var i = 0; i < buttons.length; i++) {
       (function (btn) {
-        btn.addEventListener("click", function () { startDonation(btn.getAttribute("data-donate-value")); });
+        btn.addEventListener("click", function () { createPix(btn.getAttribute("data-donate-value")); });
       })(buttons[i]);
     }
   }
@@ -492,7 +356,7 @@
       genericBtn.addEventListener("click", function () {
         var value = getCustomValue();
         if (!value) { flagInvalidCustom(); return; }
-        startDonation(value);
+        createPix(value);
       });
     }
     var input = document.getElementById("custom-donation-value");
@@ -502,7 +366,7 @@
           e.preventDefault();
           var value = getCustomValue();
           if (!value) { flagInvalidCustom(); return; }
-          startDonation(value);
+          createPix(value);
         }
       });
     }

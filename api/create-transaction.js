@@ -64,17 +64,6 @@ function sanitizeTracking(t) {
   return out;
 }
 
-// A DePix (motor da FastDepix) exige nome + CPF/CNPJ do pagador em toda transação.
-// Sanitiza e valida o mínimo antes de chamar a API (evita ida desnecessária).
-function sanitizeCustomer(c) {
-  c = c || {};
-  var name = String(c.name || "").trim().slice(0, 80);
-  var doc = String(c.cpf_cnpj || c.document || "").replace(/\D/g, "");
-  var out = { name: name, cpf_cnpj: doc };
-  out.valid = name.length >= 3 && name.indexOf(" ") !== -1 && (doc.length === 11 || doc.length === 14);
-  return out;
-}
-
 module.exports = async function handler(req, res) {
   // CORS básico (mesma origem em produção; libera preflight).
   res.setHeader("Access-Control-Allow-Origin", req.headers.origin || "*");
@@ -104,23 +93,16 @@ module.exports = async function handler(req, res) {
   }
   amount = Math.round(amount * 100) / 100;
 
-  // Dados obrigatórios do pagador (requisito DePix).
-  var customer = sanitizeCustomer(body.customer);
-  if (!customer.valid) {
-    res.status(400).json({ ok: false, error: "invalid_customer", detail: "Nome e CPF/CNPJ válidos são obrigatórios." });
-    return;
-  }
-
   var tracking = sanitizeTracking(body.tracking);
   var webhookUrl = buildWebhookUrl(req);
 
-  console.log("[ASF][create-transaction] amount:", amount, "customer:", customer.name, "doc:", customer.cpf_cnpj.length + " dígitos", "tracking:", JSON.stringify(tracking));
+  console.log("[ASF][create-transaction] amount:", amount, "tracking:", JSON.stringify(tracking));
 
   // 1-3) Cria a transação na FastDepix.
   var created = await fastdepix.createTransaction({
     amount: amount,
     tracking: tracking,
-    customer: { name: customer.name, cpf_cnpj: customer.cpf_cnpj },
+    customer: body.customer || {},
     webhookUrl: webhookUrl
   });
 
