@@ -28,11 +28,6 @@
     // Pop-up de saída (aparece uma vez quando a pessoa tenta sair/voltar).
     EXIT_POPUP: true,
 
-    // Como mostrar o pagamento ao clicar no valor:
-    //   "chave"  -> mostra a CHAVE PIX (e-mail) + passo a passo (a pessoa faz o PIX no banco)
-    //   "qrcode" -> mostra o QR Code + copia-e-cola
-    MODE: "chave",
-
     MIN_VALUE: 10,
     MAX_VALUE: 499.99,
     QR_LIB_URL: "https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"
@@ -155,48 +150,6 @@
       '</div>'
     );
   }
-  function keyScreenHtml(valueInReais) {
-    var key = String(CONFIG.PIX_KEY).trim();
-    return (
-      '<div class="pix-success pix-keyscreen">' +
-        '<span class="eyebrow">Quase lá</span>' +
-        '<h3>Faça seu PIX 🐾</h3>' +
-        '<div class="pix-amount">Valor: <strong>R$ ' + formatBRL(valueInReais) + '</strong></div>' +
-        '<label class="pix-copy-label">Chave PIX (tipo e-mail)</label>' +
-        '<div class="pix-copy">' +
-          '<input type="text" readonly value="' + escapeHtml(key) + '" id="pix-key-input">' +
-          '<button class="btn-secondary" id="pix-key-copy-btn" type="button">Copiar</button>' +
-        '</div>' +
-        '<ol class="pix-steps">' +
-          '<li>Abra o app do seu banco</li>' +
-          '<li>Escolha <strong>PIX &rsaquo; Pagar com chave</strong></li>' +
-          '<li>Cole a chave (e-mail) acima</li>' +
-          '<li>Digite <strong>R$ ' + formatBRL(valueInReais) + '</strong> e confirme</li>' +
-        '</ol>' +
-        '<button class="btn-primary" id="pix-paid-btn" type="button" style="width:100%">Já fiz o pagamento</button>' +
-        '<p class="pix-hint">Toque em “Já fiz o pagamento” depois de concluir no banco. 💚</p>' +
-      '</div>'
-    );
-  }
-  function wireKeyScreen(valueInReais) {
-    var copyBtn = document.getElementById("pix-key-copy-btn");
-    var input = document.getElementById("pix-key-input");
-    if (copyBtn && input) {
-      copyBtn.addEventListener("click", function () {
-        input.select(); input.setSelectionRange(0, 99999);
-        var done = function () { copyBtn.textContent = "Copiado ✓"; setTimeout(function () { copyBtn.textContent = "Copiar"; }, 2000); };
-        if (navigator.clipboard && navigator.clipboard.writeText) {
-          navigator.clipboard.writeText(input.value).then(done, function () { try { document.execCommand("copy"); } catch (e) {} done(); });
-        } else { try { document.execCommand("copy"); } catch (e) {} done(); }
-      });
-    }
-    var paidBtn = document.getElementById("pix-paid-btn");
-    if (paidBtn) paidBtn.addEventListener("click", function () {
-      try { if (typeof window.fbq === "function") window.fbq("track", "Purchase", { currency: "BRL", value: Number(valueInReais) }); } catch (e) {}
-      setModalBody(thankYouHtml(valueInReais));
-    });
-  }
-
   function thankYouHtml(valueInReais) {
     return (
       '<div class="pix-thanks">' +
@@ -266,13 +219,6 @@
     // Sinaliza intenção no Pixel (se houver).
     try { if (typeof window.fbq === "function") window.fbq("track", "InitiateCheckout", { currency: "BRL", value: value }); } catch (e) {}
 
-    if (CONFIG.MODE === "chave") {
-      openModal(keyScreenHtml(value));
-      wireKeyScreen(value);
-      return;
-    }
-
-    // Modo "qrcode": QR + copia-e-cola
     var code = buildPixPayload(value);
     log("BR Code (R$ " + value + "):", code);
     openModal(pixScreenHtml(code, value));
