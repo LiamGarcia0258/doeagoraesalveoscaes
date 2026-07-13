@@ -795,6 +795,80 @@ p { margin: 0 0 1em; }
 }
 .pix-form .btn-primary { margin-top: 4px; }
 
+/* chave PIX visível na página (abaixo dos valores) */
+.pix-key-inline {
+  margin: 18px 0 4px;
+  padding: 16px;
+  background: var(--color-accent-soft);
+  border: 1px dashed var(--color-accent);
+  border-radius: var(--radius-md);
+  text-align: center;
+}
+.pix-key-inline__recebedor {
+  font-size: 0.9rem;
+  color: var(--color-ink);
+  margin-bottom: 8px;
+}
+.pix-key-inline__recebedor strong { color: var(--color-ink); }
+.pix-key-inline__label {
+  display: block;
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--color-accent);
+  margin-bottom: 10px;
+}
+.pix-recebedor {
+  font-size: 0.95rem;
+  color: var(--color-ink-soft);
+  margin-bottom: 14px;
+}
+.pix-recebedor strong { color: var(--color-ink); }
+.pix-key-inline__row {
+  display: flex;
+  gap: 8px;
+  align-items: stretch;
+}
+.pix-key-inline__row input {
+  flex: 1;
+  min-width: 0;
+  font-family: var(--font-body);
+  font-size: 0.92rem;
+  font-weight: 600;
+  color: var(--color-ink);
+  text-align: center;
+  padding: 12px 10px;
+  border: 1.5px solid var(--color-line);
+  border-radius: var(--radius-sm);
+  background: #fff;
+}
+.pix-key-inline__row .btn-secondary { width: auto; flex-shrink: 0; padding: 0 18px; font-size: 0.9rem; }
+@media (max-width: 480px) {
+  .pix-key-inline__row { flex-direction: column; }
+  .pix-key-inline__row .btn-secondary { padding: 12px; }
+}
+
+/* tela "chave PIX" (pagamento manual) */
+.pix-amount {
+  display: inline-block;
+  margin: 4px auto 16px;
+  padding: 8px 18px;
+  background: var(--color-accent-soft);
+  color: var(--color-accent);
+  border-radius: 999px;
+  font-size: 1.05rem;
+  font-weight: 700;
+}
+.pix-steps {
+  text-align: left;
+  margin: 18px 0 8px;
+  padding-left: 20px;
+  color: var(--color-ink-soft);
+  font-size: 0.92rem;
+  line-height: 1.6;
+}
+.pix-steps li { margin-bottom: 4px; }
+.pix-keyscreen #pix-key-input { font-size: 0.95rem; font-weight: 600; color: var(--color-ink); }
+
 /* pop-up de saída (exit intent) */
 .exit-modal {
   position: fixed;
