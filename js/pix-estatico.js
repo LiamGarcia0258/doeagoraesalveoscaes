@@ -15,6 +15,7 @@
 
     // Nome de quem recebe a doação (aparece na página e na tela de pagamento).
     RECEBEDOR_NOME: "Rairon Abreu",
+    RECEBEDOR_CARGO: "Responsável pela ONG",
 
     // Pop-up de saída (aparece uma vez quando a pessoa tenta sair/voltar).
     EXIT_POPUP: true,
@@ -92,7 +93,7 @@
         '<span class="eyebrow">Quase lá</span>' +
         '<h3>Faça seu PIX 🐾</h3>' +
         '<div class="pix-amount">Valor: <strong>R$ ' + formatBRL(valueInReais) + '</strong></div>' +
-        '<div class="pix-recebedor">Recebedor: <strong>' + escapeHtml(CONFIG.RECEBEDOR_NOME) + '</strong></div>' +
+        '<div class="pix-recebedor">Recebedor: <strong>' + escapeHtml(CONFIG.RECEBEDOR_NOME) + '</strong><br><small>' + escapeHtml(CONFIG.RECEBEDOR_CARGO) + '</small></div>' +
         '<label class="pix-copy-label">Chave PIX (tipo e-mail)</label>' +
         '<div class="pix-copy">' +
           '<input type="text" readonly value="' + escapeHtml(key) + '" id="pix-key-input">' +
@@ -272,6 +273,8 @@
     var inlineCopy = document.getElementById("pix-inline-copy");
     var inlineReceb = document.getElementById("pix-inline-recebedor");
     if (inlineReceb) inlineReceb.textContent = String(CONFIG.RECEBEDOR_NOME);
+    var inlineCargo = document.getElementById("pix-inline-cargo");
+    if (inlineCargo) inlineCargo.textContent = String(CONFIG.RECEBEDOR_CARGO);
     if (inlineKey) inlineKey.value = String(CONFIG.PIX_KEY).trim();
     if (inlineKey && inlineCopy) inlineCopy.addEventListener("click", function () { copyToClipboard(inlineKey, inlineCopy, "Copiar chave"); });
 
