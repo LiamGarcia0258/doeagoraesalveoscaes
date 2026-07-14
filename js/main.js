@@ -35,7 +35,10 @@
     MAX_VALUE: 499.99,
 
     // Lib para desenhar o QR Code a partir do copia-e-cola (carregada sob demanda).
-    QR_LIB_URL: "https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"
+    QR_LIB_URL: "https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js",
+
+    // Pop-up de saída (aparece só quando a pessoa tenta sair/voltar).
+    EXIT_POPUP: true
   };
 
   /* ----------------------------- logging ------------------------------- */
@@ -579,6 +582,75 @@
     }
   }
 
+  /* --------------------- pop-up de saída (exit intent) ----------------- */
+  // Aparece UMA vez quando a pessoa tenta sair. Só é ARMADO depois que ela
+  // interage ou passa alguns segundos na página — assim NÃO aparece no load.
+  // Não prende o usuário (segue as regras do Facebook).
+  var exitShown = false;
+  var exitArmed = false;
+  var exitEl = null;
+
+  function buildExitPopup() {
+    if (exitEl) return exitEl;
+    var overlay = document.createElement("div");
+    overlay.className = "exit-modal";
+    overlay.innerHTML =
+      '<div class="exit-modal__box">' +
+        '<button class="pix-modal__close" aria-label="Fechar" data-exit-close>&times;</button>' +
+        '<div class="exit-modal__icon">🐾</div>' +
+        '<span class="eyebrow">Espere um segundinho…</span>' +
+        '<h3>Sua ajuda pode fazer uma <em>grande</em> diferença</h3>' +
+        '<p>Uma doação de <strong>qualquer valor</strong> já garante ração, remédio e cuidado para um animal resgatado. Você pode salvar uma vida hoje. ❤️</p>' +
+        '<button class="btn-primary" id="exit-help-btn" type="button">Quero ajudar agora 💚</button>' +
+        '<button class="exit-modal__later" type="button" data-exit-close>Agora não</button>' +
+      '</div>';
+    document.body.appendChild(overlay);
+    overlay.addEventListener("click", function (e) {
+      if (e.target === overlay || e.target.hasAttribute("data-exit-close")) hideExitPopup();
+    });
+    var helpBtn = overlay.querySelector("#exit-help-btn");
+    if (helpBtn) helpBtn.addEventListener("click", function () { hideExitPopup(); scrollToDoar(); });
+    exitEl = overlay;
+    return overlay;
+  }
+  function showExitPopup() {
+    if (exitShown || !exitArmed) return;
+    if (modalEl && modalEl.classList.contains("is-open")) return; // não interrompe pagamento
+    exitShown = true;
+    buildExitPopup().classList.add("is-open");
+    document.body.style.overflow = "hidden";
+  }
+  function hideExitPopup() {
+    if (exitEl) exitEl.classList.remove("is-open");
+    document.body.style.overflow = "";
+  }
+  function initExitIntent() {
+    if (!CONFIG.EXIT_POPUP) return;
+
+    function arm() {
+      if (exitArmed) return;
+      exitArmed = true;
+      try { history.pushState({ asf: 1 }, "", location.href); } catch (e) {}
+    }
+    setTimeout(arm, 3000);
+    ["scroll", "mousemove", "touchstart", "keydown", "click"].forEach(function (ev) {
+      window.addEventListener(ev, arm, { once: true, passive: true });
+    });
+
+    // Desktop: mouse saindo pelo topo da janela.
+    document.addEventListener("mouseout", function (e) {
+      if (!exitArmed || exitShown) return;
+      if (!e.relatedTarget && e.clientY <= 0) showExitPopup();
+    });
+
+    // Botão "voltar": só age depois de armado.
+    window.addEventListener("popstate", function () {
+      if (!exitArmed || exitShown) return;
+      showExitPopup();
+      try { history.pushState({ asf: 1 }, "", location.href); } catch (e) {}
+    });
+  }
+
   function init() {
     var vid = getOrCreateVisitorId();
     log("visitor_id ativo:", vid);
@@ -587,6 +659,7 @@
     initCustomDonate();
     initScrollButtons();
     initFaq();
+    initExitIntent();
   }
 
   if (document.readyState === "loading") {
