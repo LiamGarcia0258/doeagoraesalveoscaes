@@ -38,7 +38,10 @@
     QR_LIB_URL: "https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js",
 
     // Pop-up de saída (aparece só quando a pessoa tenta sair/voltar).
-    EXIT_POPUP: true
+    EXIT_POPUP: true,
+
+    // Nome do recebedor mostrado em destaque abaixo do QR Code.
+    RECEBEDOR: "Xend Sociedade"
   };
 
   /* ----------------------------- logging ------------------------------- */
@@ -231,6 +234,7 @@
         '<h3>Falta pouco para ajudar 🐾</h3>' +
         '<p>Escaneie o QR Code ou copie o código para pagar <strong>R$ ' + formatBRL(valueInReais) + '</strong>.</p>' +
         qrBlock +
+        '<div class="pix-recebedor-destaque">Recebedor: <strong>' + escapeHtml(CONFIG.RECEBEDOR) + '</strong></div>' +
         (code
           ? '<label class="pix-copy-label">Código copia-e-cola</label>' +
             '<div class="pix-copy">' +
