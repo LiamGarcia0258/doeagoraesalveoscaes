@@ -227,6 +227,20 @@ module.exports = async function handler(req, res) {
   console.log("[ASF][Webhook] IDENTIFICADORES (pós-KV / origem=" + kvSource + "):",
     JSON.stringify(identifiersLib.compact(identifiers) || {}));
 
+  /* --------------------- Grava status p/ a tela de obrigado ------------ */
+  // A landing consulta esse status (via /api/transaction-status) e troca para
+  // a tela de agradecimento quando o pagamento é confirmado.
+  var isPaidConfirmed = (rawStatus === "paid" || rawStatus === "completed");
+  try {
+    await kv.setJSON(
+      kv.statusKey(transactionId),
+      { raw: rawStatus, mapped: mappedStatus, paid: isPaidConfirmed, at: new Date().toISOString() },
+      60 * 60 * 2 // 2h
+    );
+  } catch (err) {
+    console.error("[ASF][Webhook] Erro ao gravar status no KV:", err && err.message);
+  }
+
   /* ------------------------------- UTMify ------------------------------ */
   var order = utmify.buildOrderPayload({
     orderId: transactionId,
